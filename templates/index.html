@@ -1,0 +1,1544 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>株式期待値分析ツール</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #212529;
+            --card-bg: #f8f9fa;
+            --border-color: #dee2e6;
+            --hover-bg: #f8f9fa;
+            --table-stripe: rgba(0, 0, 0, 0.05);
+            --chart-bg: #ffffff;
+            --chart-grid: rgba(0, 0, 0, 0.1);
+            --chart-text: #666;
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --text-color: #e0e0e0;
+            --card-bg: #2d2d2d;
+            --border-color: #404040;
+            --hover-bg: #333333;
+            --table-stripe: rgba(255, 255, 255, 0.05);
+            --chart-bg: #2d2d2d;
+            --chart-grid: rgba(255, 255, 255, 0.1);
+            --chart-text: #e0e0e0;
+            --blue-text: #4da6ff;  /* より明るい青色 */
+            --red-text: #ff6b6b;   /* より明るい赤色 */
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-color: var(--border-color);
+        }
+
+        .table {
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+
+        .table th {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+
+        .table td {
+            border-color: var(--border-color);
+            color: var(--text-color);
+        }
+
+        .table-hover tbody tr:hover {
+            background-color: var(--hover-bg);
+        }
+
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: var(--table-stripe);
+        }
+
+        .table td, .table th {
+            padding: 0.75rem;
+            vertical-align: middle;
+        }
+
+        .table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background-color: var(--card-bg);
+        }
+
+        .table-container {
+            margin-top: 20px;
+            overflow-x: auto;
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 0.25rem;
+        }
+
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .table-container::-webkit-scrollbar-track {
+            background: var(--card-bg);
+        }
+
+        .table-container::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .table-container::-webkit-scrollbar-thumb:hover {
+            background: var(--hover-bg);
+        }
+
+        .chart-container {
+            background-color: var(--chart-bg);
+            border-radius: 4px;
+            padding: 10px;
+        }
+
+        .auth-form {
+            background-color: var(--card-bg);
+            border-color: var(--border-color);
+        }
+
+        .backtest-form {
+            background-color: var(--card-bg);
+            border-color: var(--border-color);
+        }
+
+        .form-control, .form-select {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+
+        .form-control:focus, .form-select:focus {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+
+        .input-group-text {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+
+        .stock-table th, .stock-table td {
+            text-align: right;
+            padding: 8px;
+        }
+        .stock-table th:first-child, .stock-table td:first-child {
+            text-align: left;
+        }
+        .rsi-overbought,
+        .rsi-oversold,
+        .deviation-negative,
+        .deviation-positive,
+        .expectation-high,
+        .expectation-low,
+        .profit-positive,
+        .profit-negative,
+        .signal-buy,
+        .signal-sell {
+            color: var(--text-color);
+            font-weight: bold;
+        }
+        .backtest-form {
+            padding: 1rem;
+            border-radius: 0.25rem;
+            margin-bottom: 1rem;
+        }
+        .performance-card {
+            margin-bottom: 1rem;
+        }
+        .performance-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .performance-positive {
+            color: var(--text-color);
+        }
+        .performance-negative {
+            color: var(--text-color);
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px;
+        }
+        .error-message {
+            color: var(--text-color);
+            margin: 10px 0;
+        }
+        .chart-container {
+            margin: 20px 0;
+            height: 400px;
+            position: relative;
+            width: 100%;
+        }
+        .auth-form {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .auth-container {
+            display: none;
+        }
+        .main-content {
+            display: none;
+        }
+        .header-section {
+            padding: 1rem;
+            background-color: var(--card-bg);
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        @media (max-width: 768px) {
+            .header-section {
+                padding: 0.75rem;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            .btn {
+                padding: 0.375rem 0.75rem;
+                font-size: 0.875rem;
+            }
+        }
+        .rsi-oversold,
+        .deviation-negative,
+        .expectation-low,
+        .profit-negative,
+        .signal-buy {
+            color: #4da6ff !important;
+            font-weight: bold;
+        }
+
+        .rsi-overbought,
+        .deviation-positive,
+        .expectation-high,
+        .profit-positive,
+        .signal-sell {
+            color: #ff6b6b !important;
+            font-weight: bold;
+        }
+
+        /* ダークモード時の色付きテキスト */
+        [data-theme="dark"] .rsi-oversold,
+        [data-theme="dark"] .deviation-negative,
+        [data-theme="dark"] .expectation-low,
+        [data-theme="dark"] .profit-negative,
+        [data-theme="dark"] .signal-buy {
+            color: #4da6ff !important;
+        }
+
+        [data-theme="dark"] .rsi-overbought,
+        [data-theme="dark"] .deviation-positive,
+        [data-theme="dark"] .expectation-high,
+        [data-theme="dark"] .profit-positive,
+        [data-theme="dark"] .signal-sell {
+            color: #ff6b6b !important;
+        }
+
+        /* ホバー効果 */
+        .table-hover tbody tr:hover {
+            background-color: var(--hover-bg);
+        }
+
+        /* ダークモード時のホバー効果 */
+        [data-theme="dark"] .table-hover tbody tr:hover {
+            background-color: #404040;
+        }
+
+        /* ダークモード時のホバー時の文字色を固定 */
+        [data-theme="dark"] .table-hover tbody tr:hover td {
+            color: var(--text-color) !important;
+        }
+
+        /* 色付きテキストのスタイル（常に色を維持） */
+        .table-hover tbody tr:hover .rsi-oversold,
+        .table-hover tbody tr:hover .deviation-negative,
+        .table-hover tbody tr:hover .expectation-low,
+        .table-hover tbody tr:hover .profit-negative,
+        .table-hover tbody tr:hover .signal-buy {
+            color: #4da6ff !important;
+        }
+
+        .table-hover tbody tr:hover .rsi-overbought,
+        .table-hover tbody tr:hover .deviation-positive,
+        .table-hover tbody tr:hover .expectation-high,
+        .table-hover tbody tr:hover .profit-positive,
+        .table-hover tbody tr:hover .signal-sell {
+            color: #ff6b6b !important;
+        }
+
+        /* ダークモード時のホバー時の色付きテキスト */
+        [data-theme="dark"] .table-hover tbody tr:hover .rsi-oversold,
+        [data-theme="dark"] .table-hover tbody tr:hover .deviation-negative,
+        [data-theme="dark"] .table-hover tbody tr:hover .expectation-low,
+        [data-theme="dark"] .table-hover tbody tr:hover .profit-negative,
+        [data-theme="dark"] .table-hover tbody tr:hover .signal-buy {
+            color: #4da6ff !important;
+        }
+
+        [data-theme="dark"] .table-hover tbody tr:hover .rsi-overbought,
+        [data-theme="dark"] .table-hover tbody tr:hover .deviation-positive,
+        [data-theme="dark"] .table-hover tbody tr:hover .expectation-high,
+        [data-theme="dark"] .table-hover tbody tr:hover .profit-positive,
+        [data-theme="dark"] .table-hover tbody tr:hover .signal-sell {
+            color: #ff6b6b !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- 認証フォーム -->
+    <div id="authContainer" class="auth-container">
+        <div class="container mt-5">
+            <div class="auth-form">
+                <h2 class="text-center mb-4">ログイン</h2>
+                <form id="loginForm">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">ユーザー名</label>
+                        <input type="text" class="form-control" id="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">パスワード</label>
+                        <input type="password" class="form-control" id="password" required>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">ログイン</button>
+                    </div>
+                </form>
+                <div class="text-center mt-3">
+                    <a href="#" id="showRegisterForm">新規登録</a>
+                </div>
+            </div>
+
+            <div id="registerForm" class="auth-form" style="display: none;">
+                <h2 class="text-center mb-4">新規登録</h2>
+                <form id="registerFormElement">
+                    <div class="mb-3">
+                        <label for="newUsername" class="form-label">ユーザー名</label>
+                        <input type="text" class="form-control" id="newUsername" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="newPassword" class="form-label">パスワード</label>
+                        <input type="password" class="form-control" id="newPassword" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirmPassword" class="form-label">パスワード（確認）</label>
+                        <input type="password" class="form-control" id="confirmPassword" required>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">登録</button>
+                    </div>
+                </form>
+                <div class="text-center mt-3">
+                    <a href="#" id="showLoginForm">ログイン画面に戻る</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <div id="mainContent" class="main-content">
+        <div class="container mt-4">
+            <!-- ヘッダー部分を改善 -->
+            <div class="header-section mb-4">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
+                    <h1 class="mb-3 mb-md-0">株式期待値分析ツール</h1>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <button id="themeToggle" class="btn btn-outline-secondary" onclick="toggleTheme()">
+                            <i class="bi bi-moon-fill"></i> <span class="d-none d-md-inline">ダークモード</span>
+                        </button>
+                        <span id="userDisplay" class="d-none d-md-inline"></span>
+                        <button class="btn btn-outline-danger" onclick="logout()">ログアウト</button>
+                    </div>
+                </div>
+                <!-- モバイル表示用のユーザー名 -->
+                <div id="mobileUserDisplay" class="d-md-none mt-2 text-muted"></div>
+            </div>
+            
+            <div class="row mb-4">
+                <div class="col-12 col-md-6 mb-3 mb-md-0">
+                    <div class="input-group">
+                        <input type="text" id="ticker" class="form-control" placeholder="銘柄コードを入力（例: 7203, AAPL）" list="tickerHistory" autocomplete="off">
+                        <datalist id="tickerHistory"></datalist>
+                        <button class="btn btn-primary" onclick="getStockData()">検索</button>
+                    </div>
+                    <div id="stockNameDisplay" class="mt-2" style="min-height: 1.5em;"></div>
+                </div>
+                <div class="col-12 col-md-3 mb-3 mb-md-0">
+                    <div class="input-group">
+                        <input type="number" id="period" class="form-control" value="730" min="30" max="3650">
+                        <span class="input-group-text">日分</span>
+                    </div>
+                    <small class="form-text text-muted">株価取得期間（デフォルト: 2年分）</small>
+                </div>
+                <div class="col-12 col-md-3">
+                    <button class="btn btn-outline-secondary w-100" onclick="clearHistory()">履歴クリア</button>
+                </div>
+            </div>
+
+            <!-- ポートフォリオ追加ボタン -->
+            <div class="row mb-3">
+                <div class="col-12 col-md-6">
+                    <button id="addToPortfolioBtn" class="btn btn-outline-success w-100 d-none" onclick="">ポートフォリオに追加</button>
+                </div>
+            </div>
+
+            <!-- ポートフォリオ表示セクション -->
+            <div id="portfolioSection" class="mb-4 d-none">
+                <h4 class="mb-3">ポートフォリオ</h4>
+                <div id="portfolioLoading" class="loading" style="display: none;">
+                    <div class="spinner-border text-secondary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p>ポートフォリオを読み込み中...</p>
+                </div>
+                <div id="portfolioError" class="error-message d-none"></div>
+                <div class="table-responsive">
+                    <table id="portfolioTable" class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>銘柄名</th>
+                                <th>最新株価</th>
+                                <th>短期上昇期待値</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="portfolioTableBody">
+                            <!-- ポートフォリオデータはJavaScriptで動的に追加 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="expectationStats" class="row mb-4 d-none">
+                <div class="col-6 col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">期待値 平均</h6>
+                            <p class="performance-value" id="avgExpectation">-</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">期待値 Max</h6>
+                            <p class="performance-value" id="maxExpectation">-</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">期待値 Min</h6>
+                            <p class="performance-value" id="minExpectation">-</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">期間収益率</h6>
+                            <p class="performance-value" id="periodReturn">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loadingIndicator" class="loading">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p>データを取得中...</p>
+            </div>
+
+            <div id="error" class="error-message d-none"></div>
+            
+            <div class="table-container">
+                <div class="chart-container">
+                    <canvas id="priceChart"></canvas>
+                </div>
+                <div id="tradeDatesDisplay" class="mt-3 mb-3" style="font-size: 0.9em;">
+                    <!-- バックテスト実行後に売買日がここに表示されます -->
+                </div>
+            </div>
+
+            <div class="backtest-form">
+                <h5 class="mb-3">バックテスト設定</h5>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label for="buyThreshold" class="form-label">買いシグナル閾値</label>
+                        <input type="number" class="form-control" id="buyThreshold" value="30">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="sellThreshold" class="form-label">売りシグナル閾値</label>
+                        <input type="number" class="form-control" id="sellThreshold" value="0">
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="disableSell" onchange="toggleSellThreshold()">
+                            <label class="form-check-label" for="disableSell">売りなし</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="investmentAmount" class="form-label">購入金額（円）</label>
+                        <input type="number" class="form-control" id="investmentAmount" value="100000">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12 col-md-4 mb-3">
+                        <div class="mb-3">
+                            <button class="btn btn-primary w-100" onclick="runBacktest()">バックテスト実行</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="backtestResults" class="d-none">
+                <h5 class="mb-3">バックテスト結果</h5>
+                
+                <div class="row">
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title">総取引回数</h6>
+                                <p class="performance-value" id="totalTrades">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title">勝率</h6>
+                                <p class="performance-value" id="winRate">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title">総利益率</h6>
+                                <p class="performance-value" id="totalProfit">-</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title">総利益金額</h6>
+                                <p class="performance-value" id="totalProfitAmount">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="table-container mt-4">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>買付日</th>
+                                <th>売却日</th>
+                                <th>買付価格</th>
+                                <th>売却価格</th>
+                                <th>買付時期待値</th>
+                                <th>売却時期待値</th>
+                                <th>利益率</th>
+                            </tr>
+                        </thead>
+                        <tbody id="backtestTrades">
+                            <!-- データはJavaScriptで動的に追加 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>日付</th>
+                        <th>始値</th>
+                        <th>高値</th>
+                        <th>安値</th>
+                        <th>終値</th>
+                        <th>出来高</th>
+                        <th>RSI</th>
+                        <th>下乖離率</th>
+                        <th>短期上昇期待値</th>
+                    </tr>
+                </thead>
+                <tbody id="stockDataBody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css"></script>
+    <script>
+        // 認証状態の管理
+        let isAuthenticated = false;
+        let currentUser = null;
+
+        // 初期表示の制御
+        function initializeDisplay() {
+            const authContainer = document.getElementById('authContainer');
+            const mainContent = document.getElementById('mainContent');
+            const userDisplay = document.getElementById('userDisplay');
+            const mobileUserDisplay = document.getElementById('mobileUserDisplay');
+
+            // 認証状態を確認
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                isAuthenticated = true;
+                currentUser = localStorage.getItem('username');
+                authContainer.style.display = 'none';
+                mainContent.style.display = 'block';
+                userDisplay.textContent = `ようこそ、${currentUser}さん`;
+                mobileUserDisplay.textContent = `ようこそ、${currentUser}さん`;
+            } else {
+                authContainer.style.display = 'block';
+                mainContent.style.display = 'none';
+            }
+        }
+
+        // ログインフォームの処理
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            console.log('ログイン試行:', { username, password });  // デバッグログ
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                console.log('ログイン応答ステータス:', response.status);  // デバッグログ
+                const data = await response.json();
+                console.log('ログイン応答データ:', data);  // デバッグログ
+
+                if (response.ok) {
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('username', username);
+                    isAuthenticated = true;
+                    currentUser = username;
+                    initializeDisplay();
+                } else {
+                    alert(data.message || 'ログインに失敗しました');
+                }
+            } catch (error) {
+                console.error('ログインエラー:', error);  // デバッグログ
+                alert('ログイン中にエラーが発生しました');
+            }
+        });
+
+        // 新規登録フォームの処理
+        document.getElementById('registerFormElement').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const username = document.getElementById('newUsername').value;
+            const password = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (password !== confirmPassword) {
+                alert('パスワードが一致しません');
+                return;
+            }
+
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    alert('登録が完了しました。ログインしてください。');
+                    document.getElementById('showLoginForm').click();
+                } else {
+                    alert('登録に失敗しました: ' + data.message);
+                }
+            } catch (error) {
+                alert('登録中にエラーが発生しました');
+                console.error('Registration error:', error);
+            }
+        });
+
+        // フォーム切り替え
+        document.getElementById('showRegisterForm').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('loginForm').parentElement.style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
+        });
+
+        document.getElementById('showLoginForm').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('loginForm').parentElement.style.display = 'block';
+        });
+
+        // ログアウト処理
+        function logout() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('username');
+            isAuthenticated = false;
+            currentUser = null;
+            initializeDisplay();
+        }
+
+        // 認証が必要なAPIリクエストのヘッダー設定
+        function getAuthHeaders() {
+            const token = localStorage.getItem('authToken');
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            };
+        }
+
+        // 検索履歴の管理
+        const HISTORY_KEY = 'tickerSearchHistory';
+        const MAX_HISTORY = 10;
+        const PORTFOLIO_KEY = 'stockPortfolio'; // ポートフォリオ用キー
+        let currentTickerForPortfolio = null; // 現在表示中の銘柄コードを保持
+        let savedPeriodReturn = null;
+
+        function loadSearchHistory() {
+            const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+            const datalist = document.getElementById('tickerHistory');
+            datalist.innerHTML = '';
+            history.forEach(ticker => {
+                const option = document.createElement('option');
+                option.value = ticker;
+                datalist.appendChild(option);
+            });
+        }
+
+        function addToSearchHistory(ticker) {
+            if (!ticker) return;
+            
+            let history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+            // 重複を削除
+            history = history.filter(item => item !== ticker);
+            // 先頭に追加
+            history.unshift(ticker);
+            // 最大数を制限
+            if (history.length > MAX_HISTORY) {
+                history = history.slice(0, MAX_HISTORY);
+            }
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+            loadSearchHistory();
+        }
+
+        function clearHistory() {
+            localStorage.removeItem(HISTORY_KEY);
+            loadSearchHistory();
+        }
+
+        // 初期読み込み時に履歴を表示
+        loadSearchHistory();
+
+        // --- ポートフォリオ関連関数 ---
+
+        function getPortfolio() {
+            return JSON.parse(localStorage.getItem(PORTFOLIO_KEY) || '[]');
+        }
+
+        function savePortfolio(portfolio) {
+            localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(portfolio));
+        }
+
+        function addToPortfolio() {
+            if (!currentTickerForPortfolio) return;
+            let portfolio = getPortfolio();
+            if (!portfolio.includes(currentTickerForPortfolio)) {
+                portfolio.push(currentTickerForPortfolio);
+                savePortfolio(portfolio);
+                updateAddToPortfolioButtonState();
+                loadPortfolio(); // ポートフォリオ表示を更新
+            }
+        }
+
+        function removeFromPortfolio(tickerToRemove) {
+            let portfolio = getPortfolio();
+            const originalLength = portfolio.length;
+            portfolio = portfolio.filter(ticker => ticker !== tickerToRemove);
+            if (portfolio.length < originalLength) {
+                savePortfolio(portfolio);
+                loadPortfolio(); // ポートフォリオ表示を更新
+                // もし削除した銘柄が現在表示中の銘柄なら、追加ボタンの状態も更新
+                if (tickerToRemove === currentTickerForPortfolio) {
+                    updateAddToPortfolioButtonState();
+                }
+            }
+        }
+
+        function loadPortfolio() {
+            const portfolio = getPortfolio();
+            const portfolioSection = document.getElementById('portfolioSection');
+            const portfolioTableBody = document.getElementById('portfolioTableBody');
+            const portfolioLoading = document.getElementById('portfolioLoading');
+            const portfolioError = document.getElementById('portfolioError');
+
+            portfolioTableBody.innerHTML = ''; // テーブルをクリア
+            portfolioError.classList.add('d-none'); // エラーメッセージを隠す
+
+            if (portfolio.length === 0) {
+                portfolioSection.classList.add('d-none'); // ポートフォリオセクションを隠す
+                return;
+            }
+
+            portfolioSection.classList.remove('d-none'); // ポートフォリオセクションを表示
+            portfolioLoading.style.display = 'block'; // ローディング表示
+
+            fetch('/get_portfolio_data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ tickers: portfolio })
+            })
+            .then(response => response.json())
+            .then(data => {
+                portfolioLoading.style.display = 'none'; // ローディング非表示
+                if (data.error) {
+                    portfolioError.textContent = `ポートフォリオ読み込みエラー: ${data.error}`;
+                    portfolioError.classList.remove('d-none');
+                } else if (data.portfolio_data) {
+                     data.portfolio_data.forEach(item => {
+                        const row = document.createElement('tr');
+                        const expectationClass = getExpectationClass(item.short_term_expectation);
+                        const expectationValue = item.short_term_expectation !== null ? item.short_term_expectation.toFixed(2) : '-';
+                        const priceValue = item.latest_price !== null ? formatNumber(item.latest_price) : '-';
+
+                        // item.original_ticker を削除ボタンの引数に使用
+                        const originalTicker = item.original_ticker || item.ticker; // original_ticker がない場合のフォールバック
+
+                        row.innerHTML = `
+                            <td>${item.name || item.ticker || '-'}</td>
+                            <td>${priceValue}</td>
+                            <td class="${expectationClass}">${expectationValue}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-2" onclick="showStockData('${originalTicker}')">表示</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="removeFromPortfolio('${originalTicker}')">削除</button>
+                            </td>
+                        `;
+                        portfolioTableBody.appendChild(row);
+                    });
+                }
+            })
+            .catch(error => {
+                portfolioLoading.style.display = 'none'; // ローディング非表示
+                portfolioError.textContent = `ポートフォリオ読み込み中にエラーが発生しました: ${error}`;
+                portfolioError.classList.remove('d-none');
+                console.error('Portfolio Load Error:', error);
+            });
+        }
+
+         // 短期上昇期待値のクラスを決定するヘルパー関数
+        function getExpectationClass(expectation) {
+            if (expectation === null) return '';
+            if (expectation >= 30) return 'expectation-high';
+            if (expectation <= 0) return 'expectation-low';
+            return '';
+        }
+
+        function updateAddToPortfolioButtonState() {
+            const btn = document.getElementById('addToPortfolioBtn');
+            if (!currentTickerForPortfolio) {
+                btn.classList.add('d-none');
+                return;
+            }
+
+            const portfolio = getPortfolio();
+            const isInPortfolio = portfolio.includes(currentTickerForPortfolio);
+
+            btn.textContent = isInPortfolio ? 'ポートフォリオに追加済み' : 'ポートフォリオに追加';
+            btn.disabled = isInPortfolio;
+            btn.classList.remove('d-none');
+            // ボタンのonclick属性を更新
+            btn.setAttribute('onclick', 'addToPortfolio()');
+        }
+
+        async function getStockData() {
+            if (!isAuthenticated) {
+                alert('ログインが必要です');
+                return;
+            }
+
+            const ticker = document.getElementById('ticker').value.trim();
+            const period = document.getElementById('period').value;
+            currentTickerForPortfolio = ticker;
+
+            if (!ticker) {
+                showError('銘柄コードを入力してください');
+                currentTickerForPortfolio = null;
+                updateAddToPortfolioButtonState();
+                return;
+            }
+
+            addToSearchHistory(ticker);
+            showLoading(true);
+            clearError();
+            document.getElementById('stockNameDisplay').textContent = '';
+            document.getElementById('addToPortfolioBtn').classList.add('d-none');
+
+            try {
+                const response = await fetch('/get_stock_list', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                    },
+                    body: JSON.stringify({
+                        ticker: ticker,
+                        period: period
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    showError(data.error);
+                    currentTickerForPortfolio = null;
+                    updateAddToPortfolioButtonState();
+                } else {
+                    displayStockData(data.stock_data);
+                    document.getElementById('stockNameDisplay').textContent = data.stock_name;
+                    updateAddToPortfolioButtonState();
+                }
+            } catch (error) {
+                showError('データの取得中にエラーが発生しました');
+                currentTickerForPortfolio = null;
+                updateAddToPortfolioButtonState();
+                console.error('Error:', error);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function toggleSellThreshold() {
+            const sellThreshold = document.getElementById('sellThreshold');
+            const disableSell = document.getElementById('disableSell');
+            sellThreshold.disabled = disableSell.checked;
+            if (disableSell.checked) {
+                sellThreshold.value = '';
+            } else {
+                sellThreshold.value = '0';
+            }
+        }
+
+        async function runBacktest() {
+            const buyThreshold = parseFloat(document.getElementById('buyThreshold').value);
+            const sellThreshold = parseFloat(document.getElementById('sellThreshold').value);
+            const disableSell = document.getElementById('disableSell').checked;
+            const investmentAmount = parseFloat(document.getElementById('investmentAmount').value);
+            const period = document.getElementById('period').value;
+            
+            if (isNaN(buyThreshold) || isNaN(investmentAmount)) {
+                alert('買いシグナル閾値と購入金額は数値で入力してください');
+                return;
+            }
+            
+            if (!disableSell && isNaN(sellThreshold)) {
+                alert('売りシグナル閾値は数値で入力してください');
+                return;
+            }
+            
+            if (investmentAmount <= 0) {
+                alert('購入金額は0より大きい値を入力してください');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/run_backtest', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ticker: document.getElementById('ticker').value,
+                        buy_threshold: buyThreshold,
+                        sell_threshold: sellThreshold,
+                        disable_sell: disableSell,
+                        investment_amount: investmentAmount,
+                        period: period
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+                displayBacktestResults(data);
+                // バックテスト結果に基づいてチャートを更新
+                displayStockData(data.stock_data, data.trades);
+            } catch (error) {
+                showError('バックテストの実行中にエラーが発生しました');
+                console.error('Error:', error);
+            }
+        }
+
+        function displayBacktestResults(data) {
+            const resultsDiv = document.getElementById('backtestResults');
+            const performance = data.performance;
+            
+            let html = `
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">バックテスト結果</h5>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>総取引回数:</strong> ${performance.total_trades}回</p>
+                                <p><strong>勝率:</strong> ${performance.win_rate.toFixed(2)}%</p>
+                                <p><strong>総利益率:</strong> ${performance.total_profit_rate.toFixed(2)}%</p>
+                                <p><strong>総利益金額:</strong> ${Math.round(performance.total_profit_amount).toLocaleString('ja-JP')}円</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>勝ちトレード:</strong> ${performance.winning_trades}回</p>
+                                <p><strong>負けトレード:</strong> ${performance.losing_trades}回</p>
+                                <p><strong>平均利益率:</strong> ${performance.average_profit_rate.toFixed(2)}%</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 取引履歴テーブル
+            html += `
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>買付日</th>
+                                <th>売却日</th>
+                                <th>買付価格</th>
+                                <th>売却価格</th>
+                                <th>株数</th>
+                                <th>利益率</th>
+                                <th>利益金額</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            // 日付の降順でソート
+            const sortedTrades = [...data.trades].sort((a, b) => 
+                new Date(b.buy_date) - new Date(a.buy_date)
+            );
+
+            sortedTrades.forEach(trade => {
+                const profitRateClass = trade.profit_rate >= 0 ? 'expectation-high' : 'expectation-low';
+                const profitAmountClass = trade.profit_amount >= 0 ? 'expectation-high' : 'expectation-low';
+                
+                html += `
+                    <tr>
+                        <td>${trade.buy_date}</td>
+                        <td>${trade.sell_date}</td>
+                        <td style="text-align: right;">${formatNumber(trade.buy_price)}</td>
+                        <td style="text-align: right;">${formatNumber(trade.sell_price)}</td>
+                        <td style="text-align: right;">${formatNumber(trade.shares)}</td>
+                        <td class="${profitRateClass}" style="text-align: right;">${trade.profit_rate.toFixed(2)}%</td>
+                        <td class="${profitAmountClass}" style="text-align: right;">${Math.round(trade.profit_amount).toLocaleString('ja-JP')}円</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            resultsDiv.innerHTML = html;
+            resultsDiv.classList.remove('d-none');
+        }
+
+        function displayStockData(stockData, trades = null) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.classList.add('d-none');
+            const tableBody = document.getElementById('stockDataBody');
+            const statsDiv = document.getElementById('expectationStats');
+            
+            console.log("--- displayStockData called ---"); // 関数開始ログ
+            console.log("Clearing table and stats display.");
+            tableBody.innerHTML = '';
+            statsDiv.classList.add('d-none');
+            
+            let dataArray = null;
+
+            // --- 1. データ準備と検証 --- 
+            try {
+                console.log("1. Starting data preparation...");
+                if (!stockData) {
+                    console.warn('stockData is null or undefined. Aborting display.');
+                    if (window.priceChart && typeof window.priceChart.destroy === 'function') {
+                        window.priceChart.destroy();
+                        window.priceChart = null;
+                    }
+                    return;
+                }
+                dataArray = Array.isArray(stockData) ? stockData : Object.values(stockData);
+                if (dataArray.length === 0) {
+                    console.warn('No data available (empty array). Aborting display.');
+                    if (window.priceChart && typeof window.priceChart.destroy === 'function') {
+                        window.priceChart.destroy();
+                        window.priceChart = null;
+                    }
+                    return;
+                }
+                console.log(`1. Data preparation successful. dataArray length: ${dataArray.length}`);
+            } catch (dataPrepError) {
+                console.error('1. Data preparation error:', dataPrepError);
+                errorDiv.textContent = `データ準備エラー: ${dataPrepError.message}`;
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+
+            // --- 2. チャート描画 --- 
+            try {
+                console.log("2. Starting chart drawing...");
+                const chartCtx = document.getElementById('priceChart');
+                if (!chartCtx) {
+                     console.warn('Chart canvas element not found, skipping chart drawing.');
+                } else {
+                    // チャート用のデータはサーバーから受け取った順序のまま使用
+                    const chartData = dataArray;
+                    console.log("Data sample:", chartData.slice(0, 5));
+
+                    const datasets = [
+                        { /* 終値 */ 
+                            label: '終値', 
+                            data: chartData.map(item => ({
+                                x: item.date, 
+                                y: item.close
+                            })), 
+                            borderColor: 'rgb(75, 192, 192)', 
+                            backgroundColor: 'rgba(75, 192, 192, 0.1)', 
+                            borderWidth: 1, 
+                            pointRadius: 0, 
+                            fill: true, 
+                            tension: 0.1, 
+                            order: 2 
+                        }
+                    ];
+
+                    // バックテスト実行時でない場合のみ、期待値のシグナルを表示
+                    if (!trades) {
+                        const highExpectationPoints = chartData
+                            .filter(item => item.short_term_expectation !== null && item.short_term_expectation >= 30)
+                            .map(item => ({
+                                x: item.date,
+                                y: item.close
+                            }));
+
+                        const lowExpectationPoints = chartData
+                            .filter(item => item.short_term_expectation !== null && item.short_term_expectation < 0)
+                            .map(item => ({
+                                x: item.date,
+                                y: item.close
+                            }));
+
+                        if (highExpectationPoints.length > 0) {
+                            datasets.push({
+                                label: '高期待値（30以上）',
+                                data: highExpectationPoints,
+                                backgroundColor: 'red',
+                                borderColor: 'red',
+                                pointStyle: 'triangle',
+                                rotation: 0,
+                                pointRadius: 6,
+                                pointHoverRadius: 10,
+                                showLine: false,
+                                order: 0
+                            });
+                        }
+
+                        if (lowExpectationPoints.length > 0) {
+                            datasets.push({
+                                label: '低期待値（マイナス）',
+                                data: lowExpectationPoints,
+                                backgroundColor: 'blue',
+                                borderColor: 'blue',
+                                pointStyle: 'triangle',
+                                rotation: 180,
+                                pointRadius: 6,
+                                pointHoverRadius: 10,
+                                showLine: false,
+                                order: 1
+                            });
+                        }
+                    }
+
+                    // バックテストの売買ポイントがある場合は追加
+                    if (trades && trades.length > 0) {
+                        datasets.push({ /* 買いポイント */
+                            label: '買いポイント', 
+                            data: trades.map(t => ({x: t.buy_date, y: t.buy_price})).filter(p => p.x && p.y),
+                            backgroundColor: 'blue', 
+                            borderColor: 'blue', 
+                            pointStyle: 'triangle', 
+                            rotation: 0, 
+                            pointRadius: 8, 
+                            pointHoverRadius: 12,
+                            showLine: false, 
+                            order: 0
+                        });
+                        datasets.push({ /* 売りポイント */
+                            label: '売りポイント', 
+                            data: trades.map(t => ({x: t.sell_date, y: t.sell_price})).filter(p => p.x && p.y),
+                            backgroundColor: 'red', 
+                            borderColor: 'red',
+                            pointStyle: 'triangle', 
+                            rotation: 180, 
+                            pointRadius: 8, 
+                            pointHoverRadius: 12,
+                            showLine: false, 
+                            order: 1
+                        });
+                    }
+
+                    console.log("Chart configuration:", {
+                        labels: chartData.map(item => item.date),
+                        datasets: datasets.map(d => ({
+                            label: d.label,
+                            dataPoints: d.data.length
+                        }))
+                    });
+
+                    const chartConfig = {
+                        type: 'line', 
+                        data: { labels: chartData.map(item => item.date), datasets: datasets },
+                        options: {
+                            responsive: true, 
+                            maintainAspectRatio: false,
+                            interaction: { intersect: false, mode: 'index' },
+                            scales: {
+                                x: { 
+                                    type: 'time', 
+                                    time: { 
+                                        unit: 'day', 
+                                        displayFormats: { day: 'yyyy-MM-dd' } 
+                                    }, 
+                                    ticks: { 
+                                        maxRotation: 45, 
+                                        minRotation: 45,
+                                        autoSkip: true,
+                                        maxTicksLimit: 20
+                                    }
+                                },
+                                y: { 
+                                    beginAtZero: false,
+                                    ticks: { 
+                                        callback: value => value.toLocaleString('ja-JP')
+                                    },
+                                    grace: '5%'
+                                }
+                            },
+                            plugins: {
+                                legend: { display: true, position: 'top' },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const dsLabel = context.dataset.label;
+                                            const val = context.parsed.y.toLocaleString('ja-JP');
+                                            if (dsLabel === '買いポイント') return `買い: ${val}`;
+                                            if (dsLabel === '売りポイント') return `売り: ${val}`;
+                                            if (dsLabel === '終値') return `終値: ${val}`;
+                                            return '';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    };
+
+                    if (window.priceChart && typeof window.priceChart.destroy === 'function') {
+                        console.log("   Destroying existing chart instance.");
+                        window.priceChart.destroy();
+                        window.priceChart = null;
+                    }
+                    console.log("   Clearing canvas and creating new chart.");
+                    chartCtx.getContext('2d').clearRect(0, 0, chartCtx.width, chartCtx.height);
+                    window.priceChart = new Chart(chartCtx, chartConfig);
+                    console.log("2. Chart drawing successful.");
+                }
+            } catch (chartError) {
+                console.error('2. Chart drawing error:', chartError);
+                errorDiv.textContent = `チャート描画エラー: ${chartError.message}`;
+                errorDiv.classList.remove('d-none');
+            }
+
+            // --- 3. 統計情報表示 --- 
+            try {
+                 console.log(`3. Starting stats display. dataArray length: ${dataArray ? dataArray.length : 'null'}`);
+                 
+                 if (dataArray && dataArray.length > 0) {
+                    const expectations = dataArray
+                        .map(item => item.short_term_expectation)
+                        .filter(val => val !== null && !isNaN(val));
+                    
+                    if (expectations.length > 0) {
+                        const avgExpectation = expectations.reduce((a, b) => a + b, 0) / expectations.length;
+                        const maxExpectation = Math.max(...expectations);
+                        const minExpectation = Math.min(...expectations);
+
+                        // バックテストでない場合のみ、期間収益率を計算
+                        if (!trades) {
+                            const sortedData = [...dataArray].sort((a, b) => new Date(a.date) - new Date(b.date));
+                            const firstPrice = sortedData[0].close;
+                            const lastPrice = sortedData[sortedData.length - 1].close;
+                            savedPeriodReturn = ((lastPrice - firstPrice) / firstPrice) * 100;
+                        }
+
+                        console.log("   Calculated stats. Displaying...");
+                        document.getElementById('avgExpectation').textContent = avgExpectation.toFixed(2);
+                        document.getElementById('maxExpectation').textContent = maxExpectation.toFixed(2);
+                        document.getElementById('minExpectation').textContent = minExpectation.toFixed(2);
+                        document.getElementById('periodReturn').textContent = savedPeriodReturn.toFixed(2) + '%';
+                        statsDiv.classList.remove('d-none');
+                        
+                        // Apply colors based on values (positive/negative)
+                        document.getElementById('avgExpectation').className = 'performance-value ' + (avgExpectation >= 0 ? 'performance-positive' : 'performance-negative');
+                        document.getElementById('maxExpectation').className = 'performance-value ' + (maxExpectation >= 0 ? 'performance-positive' : 'performance-negative');
+                        document.getElementById('minExpectation').className = 'performance-value ' + (minExpectation >= 0 ? 'performance-positive' : 'performance-negative');
+                        document.getElementById('periodReturn').className = 'performance-value ' + (savedPeriodReturn >= 0 ? 'performance-positive' : 'performance-negative');
+                        console.log("3. Stats display successful.");
+                    } else {
+                        statsDiv.classList.add('d-none');
+                        console.log("   No expectation data to display stats.");
+                    }
+                 } else {
+                    statsDiv.classList.add('d-none');
+                    console.log("   No data available for stats.");
+                 }
+             } catch (statsError) {
+                console.error('3. Stats calculation/display error:', statsError);
+                errorDiv.textContent = `統計表示エラー: ${statsError.message}`;
+                errorDiv.classList.remove('d-none');
+             }
+
+            // --- 4. テーブル表示 --- 
+            try {
+                 console.log(`4. Starting table display. dataArray length: ${dataArray ? dataArray.length : 'null'}`);
+                 if (!dataArray || dataArray.length === 0) {
+                    console.warn("   Cannot display table, dataArray is invalid or empty.");
+                    tableBody.innerHTML = '';
+                 } else {
+                    // テーブル用のデータを日付の降順で並び替え
+                    const tableData = [...dataArray].sort((a, b) => new Date(b.date) - new Date(a.date));
+                    
+                    tableData.forEach(item => {
+                        const row = document.createElement('tr');
+                        let rsiClass = '', lowerDeviationClass = '', expectationClass = '';
+                        // Determine classes based on values
+                        if (item.rsi !== null && !isNaN(item.rsi)) {
+                            if (item.rsi >= 70) rsiClass = 'rsi-overbought';
+                            else if (item.rsi <= 30) rsiClass = 'rsi-oversold';
+                        }
+                        if (item.lower_deviation !== null && !isNaN(item.lower_deviation)) {
+                             if (item.lower_deviation <= 5) lowerDeviationClass = 'deviation-negative';
+                        }
+                        if (item.short_term_expectation !== null && !isNaN(item.short_term_expectation)) {
+                             if (item.short_term_expectation >= 30) expectationClass = 'expectation-high';
+                             else if (item.short_term_expectation <= 0) expectationClass = 'expectation-low';
+                        }
+                         row.innerHTML = `
+                            <td>${item.date}</td>
+                            <td>${formatNumber(item.open)}</td>
+                            <td>${formatNumber(item.high)}</td>
+                            <td>${formatNumber(item.low)}</td>
+                            <td>${formatNumber(item.close)}</td>
+                            <td>${formatNumber(item.volume)}</td>
+                            <td class="${rsiClass}">${item.rsi !== null && !isNaN(item.rsi) ? item.rsi.toFixed(2) : '-'}</td>
+                            <td class="${lowerDeviationClass}">${item.lower_deviation !== null && !isNaN(item.lower_deviation) ? item.lower_deviation.toFixed(2) + '%' : '-'}</td>
+                            <td class="${expectationClass}">${item.short_term_expectation !== null && !isNaN(item.short_term_expectation) ? item.short_term_expectation.toFixed(2) : '-'}</td>
+                         `;
+                        tableBody.appendChild(row);
+                    });
+                    console.log("4. Table display successful.");
+                 }
+             } catch (tableError) {
+                console.error('4. Table display error:', tableError);
+                errorDiv.textContent = `テーブル表示エラー: ${tableError.message}`;
+                errorDiv.classList.remove('d-none');
+             }
+             console.log("--- displayStockData finished ---"); // 関数終了ログ
+        }
+
+        function formatNumber(num) {
+            if (num === null || isNaN(num)) return '-';
+            if (typeof num === 'number') {
+                // 利益金額の場合は整数に四捨五入
+                if (num.toString().includes('円')) {
+                    return Math.round(num).toLocaleString('ja-JP');
+                }
+                return num.toLocaleString('ja-JP', { maximumFractionDigits: 2 });
+            }
+            return num.toLocaleString('ja-JP');
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('d-none');
+            // 銘柄名表示をクリア
+            document.getElementById('stockNameDisplay').textContent = '';
+            currentTickerForPortfolio = null; // エラー時はクリア
+            updateAddToPortfolioButtonState(); // ボタンを隠す
+        }
+
+        function showLoading(show) {
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            loadingIndicator.style.display = show ? 'block' : 'none';
+        }
+
+        function clearError() {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = '';
+            errorDiv.classList.add('d-none');
+        }
+
+        // エンターキーで検索
+        document.getElementById('ticker').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                getStockData();
+            }
+        });
+
+        // --- 初期読み込み ---
+        loadSearchHistory();
+        loadPortfolio(); // ページ読み込み時にポートフォリオを読み込む
+
+        // 初期表示を実行
+        initializeDisplay();
+
+        // テーマ切り替え機能
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            // ボタンのテキストを更新
+            const themeToggle = document.getElementById('themeToggle');
+            themeToggle.innerHTML = newTheme === 'dark' 
+                ? '<i class="bi bi-sun-fill"></i> ライトモード'
+                : '<i class="bi bi-moon-fill"></i> ダークモード';
+            
+            // チャートのテーマを更新
+            updateChartTheme();
+        }
+
+        function updateChartTheme() {
+            if (window.priceChart) {
+                const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+                const textColor = isDark ? '#e0e0e0' : '#666';
+                const gridColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+                
+                window.priceChart.options.scales.x.ticks.color = textColor;
+                window.priceChart.options.scales.y.ticks.color = textColor;
+                window.priceChart.options.scales.x.grid.color = gridColor;
+                window.priceChart.options.scales.y.grid.color = gridColor;
+                window.priceChart.options.plugins.legend.labels.color = textColor;
+                
+                window.priceChart.update();
+            }
+        }
+
+        // 初期テーマの設定
+        function initializeTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            
+            const themeToggle = document.getElementById('themeToggle');
+            themeToggle.innerHTML = savedTheme === 'dark'
+                ? '<i class="bi bi-sun-fill"></i> ライトモード'
+                : '<i class="bi bi-moon-fill"></i> ダークモード';
+        }
+
+        // 既存のスクリプトの最後に追加
+        initializeTheme();
+
+        // 銘柄データを表示する関数を追加
+        async function showStockData(ticker) {
+            if (!isAuthenticated) {
+                alert('ログインが必要です');
+                return;
+            }
+
+            currentTickerForPortfolio = ticker;
+            document.getElementById('ticker').value = ticker;
+            showLoading(true);
+            clearError();
+            document.getElementById('stockNameDisplay').textContent = '';
+            document.getElementById('addToPortfolioBtn').classList.add('d-none');
+
+            try {
+                const response = await fetch('/get_stock_list', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                    },
+                    body: JSON.stringify({
+                        ticker: ticker,
+                        period: document.getElementById('period').value
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    showError(data.error);
+                    currentTickerForPortfolio = null;
+                    updateAddToPortfolioButtonState();
+                } else {
+                    displayStockData(data.stock_data);
+                    document.getElementById('stockNameDisplay').textContent = data.stock_name;
+                    updateAddToPortfolioButtonState();
+                }
+            } catch (error) {
+                showError('データの取得中にエラーが発生しました');
+                currentTickerForPortfolio = null;
+                updateAddToPortfolioButtonState();
+                console.error('Error:', error);
+            } finally {
+                showLoading(false);
+            }
+        }
+    </script>
+</body>
+</html> 
