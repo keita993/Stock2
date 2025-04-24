@@ -83,17 +83,30 @@ def index():
 
 def normalize_ticker(ticker):
     """銘柄コードを正規化する"""
-    # 文字列の前後の空白文字（スペース、タブ、改行など）を削除
-    # 英字は大文字に統一
-    ticker = ticker.strip().upper()
-    
-    # 日本株の処理
-    # 4桁の数字、または4桁の数字+アルファベットの場合
-    if len(ticker) == 4 and (ticker.isdigit() or (ticker[:-1].isdigit() and ticker[-1].isalpha())):
-        return f"{ticker}.T"
-    
-    # その他の銘柄コードはそのまま返す
-    return ticker
+    try:
+        if ticker is None:
+            raise ValueError('銘柄コードが指定されていません')
+            
+        if not isinstance(ticker, str):
+            raise ValueError('銘柄コードは文字列である必要があります')
+            
+        # 文字列の前後の空白文字（スペース、タブ、改行など）を削除
+        # 英字は大文字に統一
+        ticker = ticker.strip().upper()
+        
+        if not ticker:
+            raise ValueError('銘柄コードが空です')
+        
+        # 日本株の処理
+        # 4桁の数字、または4桁の数字+アルファベットの場合
+        if len(ticker) == 4 and (ticker.isdigit() or (ticker[:-1].isdigit() and ticker[-1].isalpha())):
+            return f"{ticker}.T"
+        
+        # その他の銘柄コードはそのまま返す
+        return ticker
+    except Exception as e:
+        print(f"銘柄コードの正規化中にエラー: {str(e)}")
+        raise ValueError(f"無効な銘柄コード: {str(e)}")
 
 @app.route('/get_stock_list', methods=['POST'])
 def get_stock_list():
@@ -103,13 +116,23 @@ def get_stock_list():
             return jsonify({'error': 'リクエストデータがありません'}), 400
 
         ticker = data.get('ticker')
-        period = int(data.get('period', 730))  # デフォルトは2年分
-
         if not ticker:
             return jsonify({'error': '銘柄コードが指定されていません'}), 400
 
+        try:
+            period = int(data.get('period', 730))  # デフォルトは2年分
+        except (TypeError, ValueError):
+            return jsonify({'error': '期間の値が無効です'}), 400
+
         # 株価データの取得
-        stock_data = get_stock_data(ticker, period)
+        try:
+            stock_data = get_stock_data(ticker, period)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except Exception as e:
+            print(f"株価データ取得中にエラー: {str(e)}")
+            print(traceback.format_exc())
+            return jsonify({'error': '株価データの取得に失敗しました'}), 500
         
         # データの整形（日付の降順にソート）
         formatted_data = []
