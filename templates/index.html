@@ -1050,11 +1050,15 @@
             clearError();
             document.getElementById('stockNameDisplay').textContent = '';
             document.getElementById('addToPortfolioBtn').classList.add('d-none');
-            
-            // バックテスト結果を非表示にする
             document.getElementById('backtestResults').classList.add('d-none');
 
             try {
+                console.log('リクエストデータ:', {
+                    ticker: ticker,
+                    period: period,
+                    headers: getAuthHeaders()
+                });
+
                 const response = await fetch('/get_stock_list', {
                     method: 'POST',
                     headers: {
@@ -1067,7 +1071,17 @@
                     })
                 });
 
+                console.log('レスポンスステータス:', response.status);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('エラーレスポンス:', errorData);
+                    throw new Error(errorData.message || `サーバーエラー: ${response.status}`);
+                }
+
                 const data = await response.json();
+                console.log('レスポンスデータ:', data);
+
                 if (data.error) {
                     showError(data.error);
                     currentTickerForPortfolio = null;
@@ -1077,10 +1091,10 @@
                     document.getElementById('stockNameDisplay').textContent = data.stock_name;
                 }
             } catch (error) {
-                showError('データの取得中にエラーが発生しました');
+                console.error('エラー詳細:', error);
+                showError(`データの取得中にエラーが発生しました: ${error.message}`);
                 currentTickerForPortfolio = null;
                 document.getElementById('addToPortfolioBtn').classList.add('d-none');
-                console.error('Error:', error);
             } finally {
                 showLoading(false);
             }
@@ -1136,16 +1150,27 @@
                 });
 
                 const data = await response.json();
+                console.log('バックテスト結果:', data); // デバッグログ追加
+
                 if (data.error) {
                     showError(data.error);
                     return;
                 }
+
+                // バックテスト結果を表示
                 displayBacktestResults(data);
-                // バックテスト結果に基づいてチャートを更新
-                displayStockData(data.stock_data, data.trades);
+                
+                // チャートを更新
+                if (window.currentStockData) {
+                    console.log('既存の株価データを使用してチャートを更新します');
+                    displayStockData(window.currentStockData, data.trades);
+                } else {
+                    console.error('株価データが見つかりません');
+                    showError('株価データが取得できませんでした');
+                }
             } catch (error) {
+                console.error('バックテスト実行エラー:', error);
                 showError('バックテストの実行中にエラーが発生しました');
-                console.error('Error:', error);
             }
         }
 
@@ -1321,7 +1346,7 @@
                         }
                     ];
 
-                    // バックテスト実行時でない場合のみ、期待値のシグナルを表示
+                    // バックテスト実行時は期待値のシグナルを表示しない
                     if (!trades) {
                         const highExpectationPoints = chartData
                             .filter(item => item.short_term_expectation !== null && item.short_term_expectation >= 30)
@@ -1370,30 +1395,53 @@
 
                     // バックテストの売買ポイントがある場合は追加
                     if (trades && trades.length > 0) {
-                        datasets.push({ /* 買いポイント */
-                            label: '買いポイント', 
-                            data: trades.map(t => ({x: t.buy_date, y: t.buy_price})).filter(p => p.x && p.y),
-                            backgroundColor: 'blue', 
-                            borderColor: 'blue', 
-                            pointStyle: 'triangle', 
-                            rotation: 0, 
-                            pointRadius: 8, 
-                            pointHoverRadius: 12,
-                            showLine: false, 
-                            order: 0
-                        });
-                        datasets.push({ /* 売りポイント */
-                            label: '売りポイント', 
-                            data: trades.map(t => ({x: t.sell_date, y: t.sell_price})).filter(p => p.x && p.y),
-                            backgroundColor: 'red', 
-                            borderColor: 'red',
-                            pointStyle: 'triangle', 
-                            rotation: 180, 
-                            pointRadius: 8, 
-                            pointHoverRadius: 12,
-                            showLine: false, 
-                            order: 1
-                        });
+                        console.log("Adding trade points to chart:", trades);
+                        
+                        // 買いポイントの追加
+                        const buyPoints = trades
+                            .filter(trade => trade.buy_date)
+                            .map(trade => ({
+                                x: trade.buy_date,
+                                y: trade.buy_price
+                            }));
+                        
+                        if (buyPoints.length > 0) {
+                            datasets.push({
+                                label: '買いポイント',
+                                data: buyPoints,
+                                backgroundColor: 'blue',
+                                borderColor: 'blue',
+                                pointStyle: 'triangle',
+                                rotation: 0,
+                                pointRadius: 8,
+                                pointHoverRadius: 12,
+                                showLine: false,
+                                order: 0
+                            });
+                        }
+
+                        // 売りポイントの追加
+                        const sellPoints = trades
+                            .filter(trade => trade.sell_date)
+                            .map(trade => ({
+                                x: trade.sell_date,
+                                y: trade.sell_price
+                            }));
+                        
+                        if (sellPoints.length > 0) {
+                            datasets.push({
+                                label: '売りポイント',
+                                data: sellPoints,
+                                backgroundColor: 'red',
+                                borderColor: 'red',
+                                pointStyle: 'triangle',
+                                rotation: 180,
+                                pointRadius: 8,
+                                pointHoverRadius: 12,
+                                showLine: false,
+                                order: 1
+                            });
+                        }
                     }
 
                     console.log("Chart configuration:", {
