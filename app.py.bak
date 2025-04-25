@@ -9,51 +9,11 @@ import pandas as pd
 import numpy as np
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
-from flask_sqlalchemy import SQLAlchemy
-
-# 環境変数の読み込み
-load_dotenv()
 
 app = Flask(__name__)
 # sessionを使うためにSECRET_KEYを設定（実際のアプリでは安全なキーを環境変数等で設定）
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'supersecretkey')
 app.config['SECRET_KEY'] = 'your-secret-key'  # 本番環境では適切なシークレットキーを使用
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-db = SQLAlchemy(app)
-
-# ユーザーモデルの定義
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(120), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    portfolios = db.relationship('Portfolio', backref='user', lazy=True)
-
-    def __repr__(self):
-        return f'<User {self.username}>'
-
-# ポートフォリオモデルの定義
-class Portfolio(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    ticker = db.Column(db.String(20), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def __repr__(self):
-        return f'<Portfolio {self.ticker} for User {self.user_id}>'
-
-# データベースの初期化
-with app.app_context():
-    try:
-        print("データベースを初期化中...")
-        # テーブルが存在しない場合のみ作成
-        db.create_all()
-        print("データベースの初期化が完了しました")
-    except Exception as e:
-        print(f"データベースの初期化中にエラーが発生しました: {str(e)}")
-        print(traceback.format_exc())
 
 def calculate_rsi(data, period=14):
     """RSIを計算する"""
@@ -488,321 +448,87 @@ def calculate_sdi(data, period=20):
 def get_latest_stock_info(ticker_to_fetch):
     """指定された銘柄の最新情報を取得するヘルパー関数"""
     try:
-        if not ticker_to_fetch:
-            raise ValueError("銘柄コードが指定されていません")
-            
-        print(f"銘柄情報の取得を開始: {ticker_to_fetch}")
-        
-        # 銘柄コードの正規化
-        if isinstance(ticker_to_fetch, str):
-            ticker_to_fetch = ticker_to_fetch.strip()
-            if not ticker_to_fetch.endswith('.T') and len(ticker_to_fetch) == 4 and ticker_to_fetch.isdigit():
-                ticker_to_fetch = f"{ticker_to_fetch}.T"
-        else:
-            raise ValueError(f"無効な銘柄コード形式です: {ticker_to_fetch}")
-            
-        print(f"正規化後の銘柄コード: {ticker_to_fetch}")
-        
         stock = yf.Ticker(ticker_to_fetch)
 
         # 銘柄名を取得
         try:
-            print(f"銘柄の基本情報を取得中: {ticker_to_fetch}")
             stock_info = stock.info
-            if not stock_info:
-                raise ValueError("銘柄情報が取得できませんでした")
-                
             stock_name = stock_info.get('longName', '') or stock_info.get('shortName', '') or ticker_to_fetch
-            print(f"取得した銘柄名: {stock_name}")
-            
             if '.T' in ticker_to_fetch:  # 日本株の場合
-                display_ticker = ticker_to_fetch.replace('.T', '')
-                stock_name = f"{stock_name} ({display_ticker})"
+                stock_name = f"{stock_name} ({ticker_to_fetch.replace('.T', '')})"
             else:
                 stock_name = f"{stock_name} ({ticker_to_fetch})"
-        except Exception as e:
-            print(f"銘柄名の取得に失敗: {str(e)}")
-            error_details = str(e)
-            stock_name = f"{ticker_to_fetch} (エラー: {error_details})"
+        except:
+            stock_name = ticker_to_fetch
 
-        # 株価データを取得
-        print(f"株価データの取得を開始: {ticker_to_fetch}")
-        hist = stock.history(period="3mo")
+        # 指標計算に必要な期間のデータを取得 (最低50日分程度)
+        hist = stock.history(period="3mo") # 過去3ヶ月分取得
 
         if hist.empty:
-            error_msg = f"銘柄コード '{ticker_to_fetch}' のデータが見つかりませんでした。"
-            print(error_msg)
-            return {
-                "ticker": ticker_to_fetch.replace('.T', '') if '.T' in ticker_to_fetch else ticker_to_fetch,
-                "name": stock_name,
-                "latest_price": None,
-                "short_term_expectation": None,
-                "error": error_msg
-            }
+            return {"error": f"銘柄コード '{ticker_to_fetch}' のデータが見つかりませんでした。"}
 
         # 最新の価格を取得
         latest_price = hist['Close'].iloc[-1]
-        print(f"最新の株価: {latest_price}")
 
         # 最新の指標を計算
-        print(f"テクニカル指標の計算を開始: {ticker_to_fetch}")
         rsi = calculate_rsi(hist)
         upper_band, lower_band, deviation_upper, deviation_lower = calculate_bollinger_bands(hist)
 
         latest_rsi = rsi.iloc[-1] if not rsi.empty and len(rsi) > 0 else None
         latest_lower_deviation = deviation_lower.iloc[-1] if not deviation_lower.empty and len(deviation_lower) > 0 else None
 
-        print(f"計算結果 - RSI: {latest_rsi}, 下方乖離率: {latest_lower_deviation}")
-
         # 最新の短期上昇期待値を計算
         short_term_expectation = None
         if latest_rsi is not None and latest_lower_deviation is not None:
-            rsi_component = 50 - latest_rsi
-            deviation_component = abs(min(0, latest_lower_deviation))
-            raw_expectation = rsi_component + deviation_component
-            short_term_expectation = round(raw_expectation * 2, 2) if raw_expectation >= 0 else round(raw_expectation, 2)
-            print(f"短期上昇期待値: {short_term_expectation}")
+             rsi_component = 50 - latest_rsi
+             deviation_component = abs(min(0, latest_lower_deviation))
+             raw_expectation = rsi_component + deviation_component
+             short_term_expectation = round(raw_expectation * 2, 2) if raw_expectation >= 0 else round(raw_expectation, 2)
 
         return {
-            "ticker": ticker_to_fetch.replace('.T', '') if '.T' in ticker_to_fetch else ticker_to_fetch,
+            "ticker": ticker_to_fetch,
             "name": stock_name,
-            "latest_price": round(float(latest_price), 2) if latest_price is not None else None,
+            "latest_price": round(float(latest_price), 2),
             "short_term_expectation": short_term_expectation
         }
 
     except Exception as e:
-        error_message = f"銘柄情報取得中にエラー発生 ({ticker_to_fetch}): {str(e)}"
-        print(error_message)
+        print(f"銘柄情報取得中にエラー発生 ({ticker_to_fetch}): {str(e)}")
         print(traceback.format_exc())
-        return {
-            "ticker": ticker_to_fetch.replace('.T', '') if '.T' in ticker_to_fetch else ticker_to_fetch,
-            "name": f"{ticker_to_fetch} (エラー: {str(e)})",
-            "latest_price": None,
-            "short_term_expectation": None,
-            "error": error_message
-        }
-
-@app.route('/add_to_portfolio', methods=['POST'])
-def add_to_portfolio():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'message': 'リクエストデータがありません'
-            }), 400
-
-        ticker = data.get('ticker')
-        token = data.get('token')
-
-        if not ticker or not token:
-            return jsonify({
-                'success': False,
-                'message': '必要なデータが不足しています'
-            }), 400
-
-        try:
-            # トークンの検証
-            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            username = payload['user']
-            
-            # ユーザーの取得
-            user = User.query.filter_by(username=username).first()
-            if not user:
-                return jsonify({
-                    'success': False,
-                    'message': 'ユーザーが見つかりません'
-                }), 404
-
-            # 銘柄コードの正規化
-            normalized_ticker = normalize_ticker(ticker)
-
-            # 既にポートフォリオに存在するかチェック
-            existing = Portfolio.query.filter_by(user_id=user.id, ticker=normalized_ticker).first()
-            if existing:
-                return jsonify({
-                    'success': False,
-                    'message': 'この銘柄は既にポートフォリオに存在します'
-                }), 400
-
-            # ポートフォリオに追加
-            new_portfolio = Portfolio(
-                user_id=user.id,
-                ticker=normalized_ticker
-            )
-            db.session.add(new_portfolio)
-            db.session.commit()
-
-            return jsonify({
-                'success': True,
-                'message': 'ポートフォリオに追加しました'
-            })
-
-        except jwt.ExpiredSignatureError:
-            return jsonify({
-                'success': False,
-                'message': 'トークンの有効期限が切れています'
-            }), 401
-        except jwt.InvalidTokenError:
-            return jsonify({
-                'success': False,
-                'message': '無効なトークンです'
-            }), 401
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': f'エラーが発生しました: {str(e)}'
-        }), 500
-
-@app.route('/remove_from_portfolio', methods=['POST'])
-def remove_from_portfolio():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'message': 'リクエストデータがありません'
-            }), 400
-
-        ticker = data.get('ticker')
-        token = data.get('token')
-
-        if not ticker or not token:
-            return jsonify({
-                'success': False,
-                'message': '必要なデータが不足しています'
-            }), 400
-
-        try:
-            # トークンの検証
-            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            username = payload['user']
-            
-            # ユーザーの取得
-            user = User.query.filter_by(username=username).first()
-            if not user:
-                return jsonify({
-                    'success': False,
-                    'message': 'ユーザーが見つかりません'
-                }), 404
-
-            # ポートフォリオから削除
-            portfolio = Portfolio.query.filter_by(user_id=user.id, ticker=ticker).first()
-            if portfolio:
-                db.session.delete(portfolio)
-                db.session.commit()
-
-            return jsonify({
-                'success': True,
-                'message': 'ポートフォリオから削除しました'
-            })
-
-        except jwt.ExpiredSignatureError:
-            return jsonify({
-                'success': False,
-                'message': 'トークンの有効期限が切れています'
-            }), 401
-        except jwt.InvalidTokenError:
-            return jsonify({
-                'success': False,
-                'message': '無効なトークンです'
-            }), 401
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': f'エラーが発生しました: {str(e)}'
-        }), 500
+        return {"error": f"銘柄 '{ticker_to_fetch}' の情報取得中にエラーが発生しました。", "ticker": ticker_to_fetch}
 
 @app.route('/get_portfolio_data', methods=['POST'])
 def get_portfolio_data():
+    """ポートフォリオ内の銘柄データを取得する"""
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'message': 'リクエストデータがありません'
-            }), 400
+        tickers = data.get('tickers', [])
 
-        token = data.get('token')
-        if not token:
-            return jsonify({
-                'success': False,
-                'message': 'トークンがありません'
-            }), 401
+        if not tickers:
+            return jsonify({"portfolio_data": []})
 
-        try:
-            # トークンの検証
-            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            username = payload['user']
-            
-            # ユーザーの取得
-            user = User.query.filter_by(username=username).first()
-            if not user:
-                return jsonify({
-                    'success': False,
-                    'message': 'ユーザーが見つかりません'
-                }), 404
+        portfolio_data = []
+        for ticker_input in tickers:
+            # ここで normalize_ticker を呼び出す
+            ticker_to_fetch = normalize_ticker(ticker_input)
+            stock_info = get_latest_stock_info(ticker_to_fetch)
+            if stock_info and 'error' not in stock_info:
+                 # 取得成功時は元のticker_inputも保持
+                 stock_info['original_ticker'] = ticker_input
+                 portfolio_data.append(stock_info)
+            elif stock_info and 'error' in stock_info:
+                 # エラー情報を追加（元のticker_inputを使用）
+                 portfolio_data.append({"ticker": ticker_to_fetch, "original_ticker": ticker_input, "name": f"{ticker_input} (取得失敗)", "latest_price": None, "short_term_expectation": None})
+            else:
+                 # 予期せぬエラーケース
+                 portfolio_data.append({"ticker": ticker_to_fetch, "original_ticker": ticker_input, "name": f"{ticker_input} (不明なエラー)", "latest_price": None, "short_term_expectation": None})
 
-            # ユーザーのポートフォリオを取得
-            portfolios = Portfolio.query.filter_by(user_id=user.id).all()
-            
-            # 株価データを取得
-            portfolio_data = []
-            for portfolio in portfolios:
-                try:
-                    if not portfolio.ticker:
-                        print(f"警告: ポートフォリオID {portfolio.id} の銘柄コードが空です")
-                        continue
 
-                    stock_info = get_latest_stock_info(portfolio.ticker)
-                    if stock_info and 'error' not in stock_info:
-                        portfolio_data.append(stock_info)
-                    else:
-                        error_msg = stock_info.get('error', '株価データの取得に失敗しました') if stock_info else '株価データの取得に失敗しました'
-                        portfolio_data.append({
-                            'ticker': portfolio.ticker,
-                            'name': f"{portfolio.ticker} (取得失敗)",
-                            'latest_price': None,
-                            'short_term_expectation': None,
-                            'error': error_msg
-                        })
-                except Exception as e:
-                    print(f"銘柄 {portfolio.ticker} のデータ取得中にエラー: {str(e)}")
-                    portfolio_data.append({
-                        'ticker': portfolio.ticker,
-                        'name': f"{portfolio.ticker} (エラー)",
-                        'latest_price': None,
-                        'short_term_expectation': None,
-                        'error': str(e)
-                    })
-
-            return jsonify({
-                'success': True,
-                'portfolio_data': portfolio_data
-            })
-
-        except jwt.ExpiredSignatureError:
-            return jsonify({
-                'success': False,
-                'message': 'トークンの有効期限が切れています'
-            }), 401
-        except jwt.InvalidTokenError:
-            return jsonify({
-                'success': False,
-                'message': '無効なトークンです'
-            }), 401
+        return jsonify({"portfolio_data": portfolio_data})
 
     except Exception as e:
-        print(f"ポートフォリオデータ取得中にエラー: {str(e)}")
         print(traceback.format_exc())
-        return jsonify({
-            'success': False,
-            'message': f'エラーが発生しました: {str(e)}'
-        }), 500
+        return jsonify({"error": f"ポートフォリオデータ取得中にエラーが発生しました: {str(e)}"}), 500
 
 def get_stock_data(ticker, period):
     """株価データを取得する"""
@@ -886,20 +612,11 @@ def register():
                 'message': 'ユーザー名とパスワードは必須です'
             }), 400
 
-        # ユーザー名の重複チェック
-        if User.query.filter_by(username=username).first():
-            return jsonify({
-                'success': False,
-                'message': 'このユーザー名は既に使用されています'
-            }), 400
-
         # パスワードのハッシュ化
         hashed_password = generate_password_hash(password)
         
-        # ユーザー情報をデータベースに保存
-        new_user = User(username=username, password_hash=hashed_password)
-        db.session.add(new_user)
-        db.session.commit()
+        # TODO: ユーザー情報をデータベースに保存
+        # ここにデータベース操作を実装
 
         return jsonify({
             'success': True,
@@ -907,7 +624,6 @@ def register():
         })
 
     except Exception as e:
-        db.session.rollback()
         return jsonify({
             'success': False,
             'message': f'登録中にエラーが発生しました: {str(e)}'
@@ -929,7 +645,7 @@ def login():
         username = data.get('username')
         password = data.get('password')
 
-        print(f"ログイン試行 - ユーザー名: {username}")  # デバッグログ（パスワードはログに含めない）
+        print(f"ログイン試行 - ユーザー名: {username}, パスワード: {password}")  # デバッグログ
 
         if not username or not password:
             return jsonify({
@@ -937,11 +653,9 @@ def login():
                 'message': 'ユーザー名とパスワードは必須です'
             }), 400
 
-        # データベースからユーザーを検索
-        user = User.query.filter_by(username=username).first()
-        
-        if user and check_password_hash(user.password_hash, password):
-            print(f"認証成功 - ユーザー: {username}")  # デバッグログ
+        # テストユーザーの認証
+        if username == "test" and password == "test":
+            print("テストユーザー認証成功")  # デバッグログ
             
             # トークン生成
             token = jwt.encode({
@@ -966,7 +680,7 @@ def login():
         print(f"ログインエラー: {str(e)}")
         print(f"エラータイプ: {type(e)}")
         print(f"エラー引数: {e.args}")
-        print(f"スタックトレース: {traceback.format_exc()}")
+        print(f"スタックトレース: {traceback.format_exc()}")  # スタックトレースを追加
         
         return jsonify({
             'success': False,
@@ -974,20 +688,4 @@ def login():
         }), 500
 
 if __name__ == '__main__':
-    try:
-        print("Flaskアプリケーションを起動中...")
-        # データベースの初期化
-        with app.app_context():
-            try:
-                print("データベースを初期化中...")
-                db.create_all()  # テーブルを作成（存在しない場合のみ）
-                print("データベースの初期化が完了しました")
-            except Exception as e:
-                print(f"データベースの初期化中にエラーが発生しました: {str(e)}")
-                print(traceback.format_exc())
-        
-        # アプリケーションの起動
-        app.run(debug=True, host='127.0.0.1', port=5000)
-    except Exception as e:
-        print(f"アプリケーション起動中にエラーが発生しました: {str(e)}")
-        print(traceback.format_exc()) 
+    app.run(debug=True) 

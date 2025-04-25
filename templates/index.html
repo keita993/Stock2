@@ -115,8 +115,11 @@
         }
 
         .auth-form {
-            background-color: var(--card-bg);
-            border-color: var(--border-color);
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .backtest-form {
@@ -311,6 +314,32 @@
         [data-theme="dark"] .table-hover tbody tr:hover .signal-sell {
             color: #ff6b6b !important;
         }
+
+        .table-responsive {
+            position: relative;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .table-responsive thead th {
+            position: sticky;
+            top: 0;
+            background-color: var(--card-bg);
+            z-index: 1;
+        }
+
+        /* ポートフォリオテーブルのスタイル */
+        #portfolioSection .table-responsive {
+            position: relative;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        #portfolioSection .table-responsive thead th {
+            position: sticky;
+            top: 0;
+            background-color: var(--card-bg);
+            z-index: 1;
+        }
     </style>
 </head>
 <body>
@@ -412,7 +441,12 @@
 
             <!-- ポートフォリオ表示セクション -->
             <div id="portfolioSection" class="mb-4 d-none">
-                <h4 class="mb-3">ポートフォリオ</h4>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="mb-0">ポートフォリオ</h4>
+                    <div class="text-muted">
+                        <small>銘柄コード | 銘柄名 | 最新株価 | 短期上昇期待値 | 操作</small>
+                    </div>
+                </div>
                 <div id="portfolioLoading" class="loading" style="display: none;">
                     <div class="spinner-border text-secondary" role="status">
                         <span class="visually-hidden">Loading...</span>
@@ -424,6 +458,7 @@
                     <table id="portfolioTable" class="table table-hover">
                         <thead>
                             <tr>
+                                <th>銘柄コード</th>
                                 <th>銘柄名</th>
                                 <th>最新株価</th>
                                 <th>短期上昇期待値</th>
@@ -586,8 +621,6 @@
                         <th>安値</th>
                         <th>終値</th>
                         <th>出来高</th>
-                        <th>RSI</th>
-                        <th>下乖離率</th>
                         <th>短期上昇期待値</th>
                     </tr>
                 </thead>
@@ -598,7 +631,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
     <script>
         // 認証状態の管理
         let isAuthenticated = false;
@@ -610,6 +643,7 @@
             const mainContent = document.getElementById('mainContent');
             const userDisplay = document.getElementById('userDisplay');
             const mobileUserDisplay = document.getElementById('mobileUserDisplay');
+            const portfolioSection = document.getElementById('portfolioSection');
 
             // 認証状態を確認
             const token = localStorage.getItem('authToken');
@@ -620,9 +654,12 @@
                 mainContent.style.display = 'block';
                 userDisplay.textContent = `ようこそ、${currentUser}さん`;
                 mobileUserDisplay.textContent = `ようこそ、${currentUser}さん`;
+                portfolioSection.classList.remove('d-none');
+                updatePortfolio(); // ポートフォリオを読み込む
             } else {
                 authContainer.style.display = 'block';
                 mainContent.style.display = 'none';
+                portfolioSection.classList.add('d-none');
             }
         }
 
@@ -713,6 +750,18 @@
         function logout() {
             localStorage.removeItem('authToken');
             localStorage.removeItem('username');
+            // 検索窓の値をクリア
+            document.getElementById('ticker').value = '';
+            // 銘柄情報をクリア
+            document.getElementById('stockNameDisplay').textContent = '';
+            document.getElementById('stockDataBody').innerHTML = '';
+            document.getElementById('expectationStats').classList.add('d-none');
+            document.getElementById('backtestResults').classList.add('d-none');
+            // チャートをクリア
+            if (window.priceChart) {
+                window.priceChart.destroy();
+                window.priceChart = null;
+            }
             isAuthenticated = false;
             currentUser = null;
             initializeDisplay();
@@ -728,14 +777,18 @@
         }
 
         // 検索履歴の管理
-        const HISTORY_KEY = 'tickerSearchHistory';
         const MAX_HISTORY = 10;
         const PORTFOLIO_KEY = 'stockPortfolio'; // ポートフォリオ用キー
         let currentTickerForPortfolio = null; // 現在表示中の銘柄コードを保持
         let savedPeriodReturn = null;
 
+        function getHistoryKey() {
+            const username = localStorage.getItem('username');
+            return username ? `tickerSearchHistory_${username}` : 'tickerSearchHistory';
+        }
+
         function loadSearchHistory() {
-            const history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+            const history = JSON.parse(localStorage.getItem(getHistoryKey()) || '[]');
             const datalist = document.getElementById('tickerHistory');
             datalist.innerHTML = '';
             history.forEach(ticker => {
@@ -748,7 +801,7 @@
         function addToSearchHistory(ticker) {
             if (!ticker) return;
             
-            let history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+            let history = JSON.parse(localStorage.getItem(getHistoryKey()) || '[]');
             // 重複を削除
             history = history.filter(item => item !== ticker);
             // 先頭に追加
@@ -757,17 +810,14 @@
             if (history.length > MAX_HISTORY) {
                 history = history.slice(0, MAX_HISTORY);
             }
-            localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+            localStorage.setItem(getHistoryKey(), JSON.stringify(history));
             loadSearchHistory();
         }
 
         function clearHistory() {
-            localStorage.removeItem(HISTORY_KEY);
+            localStorage.removeItem(getHistoryKey());
             loadSearchHistory();
         }
-
-        // 初期読み込み時に履歴を表示
-        loadSearchHistory();
 
         // --- ポートフォリオ関連関数 ---
 
@@ -779,116 +829,203 @@
             localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(portfolio));
         }
 
-        function addToPortfolio() {
-            if (!currentTickerForPortfolio) return;
-            let portfolio = getPortfolio();
-            if (!portfolio.includes(currentTickerForPortfolio)) {
-                portfolio.push(currentTickerForPortfolio);
-                savePortfolio(portfolio);
-                updateAddToPortfolioButtonState();
-                loadPortfolio(); // ポートフォリオ表示を更新
-            }
-        }
-
-        function removeFromPortfolio(tickerToRemove) {
-            let portfolio = getPortfolio();
-            const originalLength = portfolio.length;
-            portfolio = portfolio.filter(ticker => ticker !== tickerToRemove);
-            if (portfolio.length < originalLength) {
-                savePortfolio(portfolio);
-                loadPortfolio(); // ポートフォリオ表示を更新
-                // もし削除した銘柄が現在表示中の銘柄なら、追加ボタンの状態も更新
-                if (tickerToRemove === currentTickerForPortfolio) {
-                    updateAddToPortfolioButtonState();
-                }
-            }
-        }
-
-        function loadPortfolio() {
-            const portfolio = getPortfolio();
-            const portfolioSection = document.getElementById('portfolioSection');
-            const portfolioTableBody = document.getElementById('portfolioTableBody');
-            const portfolioLoading = document.getElementById('portfolioLoading');
-            const portfolioError = document.getElementById('portfolioError');
-
-            portfolioTableBody.innerHTML = ''; // テーブルをクリア
-            portfolioError.classList.add('d-none'); // エラーメッセージを隠す
-
-            if (portfolio.length === 0) {
-                portfolioSection.classList.add('d-none'); // ポートフォリオセクションを隠す
+        function addToPortfolio(ticker, originalTicker) {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                alert('ログインが必要です');
                 return;
             }
 
-            portfolioSection.classList.remove('d-none'); // ポートフォリオセクションを表示
-            portfolioLoading.style.display = 'block'; // ローディング表示
+            // 必要なデータを取得
+            const stockName = document.getElementById('stockNameDisplay').textContent;
+            const stockData = window.currentStockData;
+            
+            // データの検証
+            if (!stockData || stockData.length === 0) {
+                alert('株価データが取得できていません');
+                return;
+            }
+
+            const latestData = stockData[0];
+            if (!latestData || !latestData.close || !latestData.short_term_expectation) {
+                alert('株価データが不完全です');
+                return;
+            }
+
+            // デバッグ用ログ
+            console.log('送信するデータ:', {
+                ticker: ticker,
+                original_ticker: originalTicker,
+                token: token
+            });
+
+            const requestData = {
+                ticker: ticker,
+                original_ticker: originalTicker,
+                token: token
+            };
+
+            fetch('/add_to_portfolio', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        console.error('サーバーからのエラーレスポンス:', data);
+                        throw new Error(data.message || 'エラーが発生しました');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('ポートフォリオデータのレスポンス:', data);
+                if (data.success) {
+                    updatePortfolio();
+                } else {
+                    alert(data.message || 'エラーが発生しました');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert(error.message);
+            });
+        }
+
+        function removeFromPortfolio(ticker) {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('ログインが必要です');
+                return;
+            }
+
+            fetch('/remove_from_portfolio', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    ticker: ticker,
+                    token: token
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('ポートフォリオから削除しました');
+                    updatePortfolio();
+                } else {
+                    alert(data.message || 'エラーが発生しました');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('エラーが発生しました');
+            });
+        }
+
+        function updatePortfolio() {
+            const token = localStorage.getItem('authToken');
+            const portfolioSection = document.getElementById('portfolioSection');
+            const portfolioTable = document.getElementById('portfolioTable');
+            const portfolioLoading = document.getElementById('portfolioLoading');
+            const portfolioError = document.getElementById('portfolioError');
+
+            if (!token) {
+                portfolioSection.classList.add('d-none');
+                return;
+            }
+
+            console.log('認証トークン:', token); // デバッグ用ログ追加
+
+            portfolioSection.classList.remove('d-none');
+            portfolioLoading.style.display = 'block';
+            portfolioError.classList.add('d-none');
+
+            const requestData = {
+                token: token
+            };
+            console.log('リクエストデータ:', requestData); // デバッグ用ログ追加
 
             fetch('/get_portfolio_data', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ tickers: portfolio })
+                body: JSON.stringify(requestData)
             })
-            .then(response => response.json())
-            .then(data => {
-                portfolioLoading.style.display = 'none'; // ローディング非表示
-                if (data.error) {
-                    portfolioError.textContent = `ポートフォリオ読み込みエラー: ${data.error}`;
-                    portfolioError.classList.remove('d-none');
-                } else if (data.portfolio_data) {
-                     data.portfolio_data.forEach(item => {
-                        const row = document.createElement('tr');
-                        const expectationClass = getExpectationClass(item.short_term_expectation);
-                        const expectationValue = item.short_term_expectation !== null ? item.short_term_expectation.toFixed(2) : '-';
-                        const priceValue = item.latest_price !== null ? formatNumber(item.latest_price) : '-';
-
-                        // item.original_ticker を削除ボタンの引数に使用
-                        const originalTicker = item.original_ticker || item.ticker; // original_ticker がない場合のフォールバック
-
-                        row.innerHTML = `
-                            <td>${item.name || item.ticker || '-'}</td>
-                            <td>${priceValue}</td>
-                            <td class="${expectationClass}">${expectationValue}</td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-primary me-2" onclick="showStockData('${originalTicker}')">表示</button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="removeFromPortfolio('${originalTicker}')">削除</button>
-                            </td>
-                        `;
-                        portfolioTableBody.appendChild(row);
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.message || 'エラーが発生しました');
                     });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('ポートフォリオデータのレスポンス:', data); // デバッグ用ログ追加
+                portfolioLoading.style.display = 'none';
+                if (data.success) {
+                    if (data.portfolio_data.length === 0) {
+                        portfolioTable.innerHTML = '<tr><td colspan="5">ポートフォリオが空です</td></tr>';
+                        return;
+                    }
+
+                    console.log('個別のポートフォリオデータ:', data.portfolio_data); // デバッグ用ログ追加
+                    let html = '';
+                    data.portfolio_data.forEach(stock => {
+                        // データの存在チェック
+                        const name = stock.name || stock.ticker;
+                        const latestPrice = stock.latest_price !== null ? formatNumber(stock.latest_price) + '円' : '-';
+                        const expectation = stock.short_term_expectation !== null ? formatNumber(stock.short_term_expectation) : '-';
+                        
+                        // 期待値に応じたクラスを設定
+                        let expectationClass = '';
+                        if (stock.short_term_expectation !== null && !isNaN(stock.short_term_expectation)) {
+                            if (stock.short_term_expectation >= 30) {
+                                expectationClass = 'expectation-high';
+                            } else if (stock.short_term_expectation <= 0) {
+                                expectationClass = 'expectation-low';
+                            }
+                        }
+
+                        html += `
+                            <tr>
+                                <td>${stock.ticker}</td>
+                                <td>${name}</td>
+                                <td>${latestPrice}</td>
+                                <td class="${expectationClass}">${expectation}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary me-2" onclick="showStockData('${stock.ticker}')">表示</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="removeFromPortfolio('${stock.ticker}')">削除</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    portfolioTable.innerHTML = html;
+                } else {
+                    portfolioError.textContent = data.message || 'エラーが発生しました';
+                    portfolioError.classList.remove('d-none');
                 }
             })
             .catch(error => {
-                portfolioLoading.style.display = 'none'; // ローディング非表示
-                portfolioError.textContent = `ポートフォリオ読み込み中にエラーが発生しました: ${error}`;
+                console.error('Error:', error);
+                portfolioLoading.style.display = 'none';
+                portfolioError.textContent = error.message || 'エラーが発生しました';
                 portfolioError.classList.remove('d-none');
-                console.error('Portfolio Load Error:', error);
             });
         }
 
-         // 短期上昇期待値のクラスを決定するヘルパー関数
-        function getExpectationClass(expectation) {
-            if (expectation === null) return '';
-            if (expectation >= 30) return 'expectation-high';
-            if (expectation <= 0) return 'expectation-low';
-            return '';
-        }
-
-        function updateAddToPortfolioButtonState() {
-            const btn = document.getElementById('addToPortfolioBtn');
-            if (!currentTickerForPortfolio) {
-                btn.classList.add('d-none');
-                return;
-            }
-
-            const portfolio = getPortfolio();
-            const isInPortfolio = portfolio.includes(currentTickerForPortfolio);
-
-            btn.textContent = isInPortfolio ? 'ポートフォリオに追加済み' : 'ポートフォリオに追加';
-            btn.disabled = isInPortfolio;
-            btn.classList.remove('d-none');
-            // ボタンのonclick属性を更新
-            btn.setAttribute('onclick', 'addToPortfolio()');
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('d-none');
+            // 銘柄名表示をクリア
+            document.getElementById('stockNameDisplay').textContent = '';
+            currentTickerForPortfolio = null; // エラー時はクリア
         }
 
         async function getStockData() {
@@ -904,7 +1041,7 @@
             if (!ticker) {
                 showError('銘柄コードを入力してください');
                 currentTickerForPortfolio = null;
-                updateAddToPortfolioButtonState();
+                document.getElementById('addToPortfolioBtn').classList.add('d-none');
                 return;
             }
 
@@ -913,6 +1050,9 @@
             clearError();
             document.getElementById('stockNameDisplay').textContent = '';
             document.getElementById('addToPortfolioBtn').classList.add('d-none');
+            
+            // バックテスト結果を非表示にする
+            document.getElementById('backtestResults').classList.add('d-none');
 
             try {
                 const response = await fetch('/get_stock_list', {
@@ -931,16 +1071,15 @@
                 if (data.error) {
                     showError(data.error);
                     currentTickerForPortfolio = null;
-                    updateAddToPortfolioButtonState();
+                    document.getElementById('addToPortfolioBtn').classList.add('d-none');
                 } else {
                     displayStockData(data.stock_data);
                     document.getElementById('stockNameDisplay').textContent = data.stock_name;
-                    updateAddToPortfolioButtonState();
                 }
             } catch (error) {
                 showError('データの取得中にエラーが発生しました');
                 currentTickerForPortfolio = null;
-                updateAddToPortfolioButtonState();
+                document.getElementById('addToPortfolioBtn').classList.add('d-none');
                 console.error('Error:', error);
             } finally {
                 showLoading(false);
@@ -1090,12 +1229,40 @@
             errorDiv.classList.add('d-none');
             const tableBody = document.getElementById('stockDataBody');
             const statsDiv = document.getElementById('expectationStats');
+            const addToPortfolioBtn = document.getElementById('addToPortfolioBtn');
             
-            console.log("--- displayStockData called ---"); // 関数開始ログ
+            // データの検証
+            if (!stockData || stockData.length === 0) {
+                errorDiv.textContent = '株価データが取得できていません';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+
+            const latestData = stockData[0];
+            if (!latestData || !latestData.close || !latestData.short_term_expectation) {
+                errorDiv.textContent = '株価データが不完全です';
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+
+            // 現在の株価データをグローバル変数に保存
+            window.currentStockData = stockData;
+            
+            console.log("--- displayStockData called ---");
             console.log("Clearing table and stats display.");
             tableBody.innerHTML = '';
             statsDiv.classList.add('d-none');
             
+            // ポートフォリオ追加ボタンの表示制御
+            if (currentTickerForPortfolio) {
+                addToPortfolioBtn.classList.remove('d-none');
+                addToPortfolioBtn.onclick = function() {
+                    addToPortfolio(currentTickerForPortfolio, currentTickerForPortfolio);
+                };
+            } else {
+                addToPortfolioBtn.classList.add('d-none');
+            }
+
             let dataArray = null;
 
             // --- 1. データ準備と検証 --- 
@@ -1361,30 +1528,20 @@
                     
                     tableData.forEach(item => {
                         const row = document.createElement('tr');
-                        let rsiClass = '', lowerDeviationClass = '', expectationClass = '';
-                        // Determine classes based on values
-                        if (item.rsi !== null && !isNaN(item.rsi)) {
-                            if (item.rsi >= 70) rsiClass = 'rsi-overbought';
-                            else if (item.rsi <= 30) rsiClass = 'rsi-oversold';
-                        }
-                        if (item.lower_deviation !== null && !isNaN(item.lower_deviation)) {
-                             if (item.lower_deviation <= 5) lowerDeviationClass = 'deviation-negative';
-                        }
+                        let expectationClass = '';
                         if (item.short_term_expectation !== null && !isNaN(item.short_term_expectation)) {
-                             if (item.short_term_expectation >= 30) expectationClass = 'expectation-high';
-                             else if (item.short_term_expectation <= 0) expectationClass = 'expectation-low';
+                            if (item.short_term_expectation >= 30) expectationClass = 'expectation-high';
+                            else if (item.short_term_expectation <= 0) expectationClass = 'expectation-low';
                         }
-                         row.innerHTML = `
+                        row.innerHTML = `
                             <td>${item.date}</td>
                             <td>${formatNumber(item.open)}</td>
                             <td>${formatNumber(item.high)}</td>
                             <td>${formatNumber(item.low)}</td>
                             <td>${formatNumber(item.close)}</td>
                             <td>${formatNumber(item.volume)}</td>
-                            <td class="${rsiClass}">${item.rsi !== null && !isNaN(item.rsi) ? item.rsi.toFixed(2) : '-'}</td>
-                            <td class="${lowerDeviationClass}">${item.lower_deviation !== null && !isNaN(item.lower_deviation) ? item.lower_deviation.toFixed(2) + '%' : '-'}</td>
                             <td class="${expectationClass}">${item.short_term_expectation !== null && !isNaN(item.short_term_expectation) ? item.short_term_expectation.toFixed(2) : '-'}</td>
-                         `;
+                        `;
                         tableBody.appendChild(row);
                     });
                     console.log("4. Table display successful.");
@@ -1409,16 +1566,6 @@
             return num.toLocaleString('ja-JP');
         }
 
-        function showError(message) {
-            const errorDiv = document.getElementById('error');
-            errorDiv.textContent = message;
-            errorDiv.classList.remove('d-none');
-            // 銘柄名表示をクリア
-            document.getElementById('stockNameDisplay').textContent = '';
-            currentTickerForPortfolio = null; // エラー時はクリア
-            updateAddToPortfolioButtonState(); // ボタンを隠す
-        }
-
         function showLoading(show) {
             const loadingIndicator = document.getElementById('loadingIndicator');
             loadingIndicator.style.display = show ? 'block' : 'none';
@@ -1439,7 +1586,6 @@
 
         // --- 初期読み込み ---
         loadSearchHistory();
-        loadPortfolio(); // ページ読み込み時にポートフォリオを読み込む
 
         // 初期表示を実行
         initializeDisplay();
@@ -1524,16 +1670,13 @@
                 if (data.error) {
                     showError(data.error);
                     currentTickerForPortfolio = null;
-                    updateAddToPortfolioButtonState();
                 } else {
                     displayStockData(data.stock_data);
                     document.getElementById('stockNameDisplay').textContent = data.stock_name;
-                    updateAddToPortfolioButtonState();
                 }
             } catch (error) {
                 showError('データの取得中にエラーが発生しました');
                 currentTickerForPortfolio = null;
-                updateAddToPortfolioButtonState();
                 console.error('Error:', error);
             } finally {
                 showLoading(false);
