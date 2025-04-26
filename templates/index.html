@@ -758,13 +758,17 @@
             document.getElementById('expectationStats').classList.add('d-none');
             document.getElementById('backtestResults').classList.add('d-none');
             // チャートをクリア
-            if (window.priceChart) {
+            if (window.priceChart && typeof window.priceChart.destroy === 'function') {
                 window.priceChart.destroy();
                 window.priceChart = null;
             }
             isAuthenticated = false;
             currentUser = null;
-            initializeDisplay();
+            
+            // ログイン画面を表示
+            document.getElementById('authContainer').style.display = 'block';
+            document.getElementById('mainContent').style.display = 'none';
+            document.getElementById('portfolioSection').classList.add('d-none');
         }
 
         // 認証が必要なAPIリクエストのヘッダー設定
