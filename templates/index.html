@@ -635,7 +635,7 @@
     <script>
         // 認証状態の管理
         let isAuthenticated = false;
-        let currentUser = null;
+        let currentUser = '';
 
         // 初期表示の制御
         function initializeDisplay() {
@@ -675,7 +675,7 @@
                 const response = await fetch('/login', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ username, password })
                 });
@@ -763,21 +763,12 @@
                 window.priceChart = null;
             }
             isAuthenticated = false;
-            currentUser = null;
+            currentUser = '';
             
             // ログイン画面を表示
             document.getElementById('authContainer').style.display = 'block';
             document.getElementById('mainContent').style.display = 'none';
             document.getElementById('portfolioSection').classList.add('d-none');
-        }
-
-        // 認証が必要なAPIリクエストのヘッダー設定
-        function getAuthHeaders() {
-            const token = localStorage.getItem('authToken');
-            return {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            };
         }
 
         // 検索履歴の管理
@@ -1060,14 +1051,16 @@
                 console.log('リクエストデータ:', {
                     ticker: ticker,
                     period: period,
-                    headers: getAuthHeaders()
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                    }
                 });
 
                 const response = await fetch('/get_stock_list', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        ...getAuthHeaders()
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     },
                     body: JSON.stringify({
                         ticker: ticker,
@@ -1710,7 +1703,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        ...getAuthHeaders()
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     },
                     body: JSON.stringify({
                         ticker: ticker,

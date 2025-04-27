@@ -10,16 +10,28 @@ import numpy as np
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from flask_sqlalchemy import SQLAlchemy
+from flask_wtf.csrf import CSRFProtect
+
+# CSRF保護の初期化
+csrf = CSRFProtect()
 
 # 環境変数の読み込み
 load_dotenv()
 
 app = Flask(__name__)
-# sessionを使うためにSECRET_KEYを設定（実際のアプリでは安全なキーを環境変数等で設定）
+# sessionを使うためにSECRET_KEYを設定
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'supersecretkey')
-app.config['SECRET_KEY'] = 'your-secret-key'  # 本番環境では適切なシークレットキーを使用
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'supersecretkey')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config.update(
+    SESSION_COOKIE_SECURE=False,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=1),
+    SQLALCHEMY_ENGINE_OPTIONS={'pool_pre_ping': True},
+    WTF_CSRF_ENABLED=False  # CSRF保護を無効化
+)
 
 db = SQLAlchemy(app)
 
