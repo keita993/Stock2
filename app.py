@@ -11,9 +11,35 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
+from functools import wraps
 
 # CSRF保護の初期化
 csrf = CSRFProtect()
+
+def require_auth(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            token = request.headers.get('Authorization')
+            if not token:
+                return jsonify({'success': False, 'message': 'トークンが必要です'}), 401
+            
+            # Bearerトークンの形式を想定
+            if token.startswith('Bearer '):
+                token = token[7:]
+            
+            # トークンの検証
+            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            request.user = payload['user']
+            return f(*args, **kwargs)
+            
+        except jwt.ExpiredSignatureError:
+            return jsonify({'success': False, 'message': 'トークンの有効期限が切れています'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'success': False, 'message': '無効なトークンです'}), 401
+        except Exception as e:
+            return jsonify({'success': False, 'message': f'認証エラー: {str(e)}'}), 401
+    return decorated_function
 
 # 環境変数の読み込み
 load_dotenv()
@@ -216,7 +242,7 @@ def get_stock_list():
         print(f"スタックトレース: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
-def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_sell=False, investment_amount=100000):
+def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_sell=False, shares=100):
     """バックテストを実行する"""
     try:
         trades = []
@@ -248,14 +274,10 @@ def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_s
             # 買いシグナルの確認
             if current_data['short_term_expectation'] is not None and \
                current_data['short_term_expectation'] >= buy_threshold:
-                # 購入株数を計算
-                current_price = current_data['close']
-                shares = int(investment_amount / current_price)
-                
                 # 新しいポジションを追加
                 position = {
                     'buy_date': current_data['date'],
-                    'buy_price': current_price,
+                    'buy_price': current_data['close'],
                     'shares': shares,
                     'buy_expectation': current_data['short_term_expectation'],
                     'buy_date_obj': current_date
@@ -267,13 +289,13 @@ def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_s
                     trade = {
                         'buy_date': current_data['date'],
                         'sell_date': latest_date,
-                        'buy_price': current_price,
+                        'buy_price': current_data['close'],
                         'sell_price': latest_price,
                         'shares': shares,
                         'buy_expectation': current_data['short_term_expectation'],
                         'sell_expectation': None,
-                        'profit_rate': ((latest_price - current_price) / current_price) * 100,
-                        'profit_amount': (latest_price - current_price) * shares
+                        'profit_rate': ((latest_price - current_data['close']) / current_data['close']) * 100,
+                        'profit_amount': (latest_price - current_data['close']) * shares
                     }
                     trades.append(trade)
             
@@ -379,7 +401,7 @@ def run_backtest():
         # 売りなしの場合はsell_thresholdをNoneに設定
         sell_threshold = None if disable_sell else float(data.get('sell_threshold', 0))
         period = int(data.get('period', 730))
-        investment_amount = float(data.get('investment_amount', 100000))
+        shares = int(data.get('shares', 100))  # デフォルトを100株に設定
         
         if not ticker:
             return jsonify({"error": "銘柄コードを入力してください"}), 400
@@ -453,7 +475,7 @@ def run_backtest():
                 continue
 
         # バックテストを実行
-        backtest_result = calculate_backtest(stock_data, buy_threshold, sell_threshold, disable_sell, investment_amount)
+        backtest_result = calculate_backtest(stock_data, buy_threshold, sell_threshold, disable_sell, shares)
         
         if backtest_result is None:
             return jsonify({"error": "バックテストの実行中にエラーが発生しました"}), 500
@@ -984,6 +1006,51 @@ def login():
             'success': False,
             'message': f'ログイン中にエラーが発生しました: {str(e)}'
         }), 500
+
+@app.route('/change_password', methods=['POST'])
+@require_auth
+def change_password():
+    try:
+        data = request.get_json()
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+        
+        if not current_password or not new_password:
+            return jsonify({'success': False, 'message': '現在のパスワードと新しいパスワードを入力してください'}), 400
+        
+        # トランザクションの開始
+        db.session.begin()
+        
+        try:
+            # ユーザー情報の取得（ロックをかけて）
+            user = User.query.filter_by(username=request.user).with_for_update().first()
+            if not user:
+                db.session.rollback()
+                return jsonify({'success': False, 'message': 'ユーザーが見つかりません'}), 404
+            
+            # 現在のパスワードの確認
+            if not check_password_hash(user.password_hash, current_password):
+                db.session.rollback()
+                return jsonify({'success': False, 'message': '現在のパスワードが正しくありません'}), 401
+            
+            # 新しいパスワードのハッシュ化と保存
+            user.password_hash = generate_password_hash(new_password)
+            
+            # 変更をコミット
+            db.session.commit()
+            
+            print(f"パスワード変更成功 - ユーザー: {request.user}")  # デバッグログ
+            
+            return jsonify({'success': True, 'message': 'パスワードが変更されました'})
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"パスワード変更中のエラー: {str(e)}")  # デバッグログ
+            raise
+            
+    except Exception as e:
+        print(f"パスワード変更エラー: {str(e)}")
+        return jsonify({'success': False, 'message': 'パスワードの変更中にエラーが発生しました'}), 500
 
 if __name__ == '__main__':
     try:
