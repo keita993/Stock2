@@ -1064,12 +1064,21 @@
                 return;
             }
 
+            // バックテスト結果をリセット
+            document.getElementById('backtestResults').classList.add('d-none');
+            document.getElementById('backtestResults').innerHTML = '';
+            
+            // バックテスト設定をリセット
+            document.getElementById('buyThreshold').value = '30';
+            document.getElementById('sellThreshold').value = '0';
+            document.getElementById('disableSell').checked = false;
+            document.getElementById('shares').value = '100';
+
             addToSearchHistory(ticker);
             showLoading(true);
             clearError();
             document.getElementById('stockNameDisplay').textContent = '';
             document.getElementById('addToPortfolioBtn').classList.add('d-none');
-            document.getElementById('backtestResults').classList.add('d-none');
 
             try {
                 console.log('リクエストデータ:', {
@@ -1696,6 +1705,16 @@
             clearError();
             document.getElementById('stockNameDisplay').textContent = '';
             document.getElementById('addToPortfolioBtn').classList.add('d-none');
+
+            // バックテスト結果をリセット
+            document.getElementById('backtestResults').classList.add('d-none');
+            document.getElementById('backtestResults').innerHTML = '';
+            
+            // バックテスト設定をリセット
+            document.getElementById('buyThreshold').value = '30';
+            document.getElementById('sellThreshold').value = '0';
+            document.getElementById('disableSell').checked = false;
+            document.getElementById('shares').value = '100';
 
             try {
                 const response = await fetch('/get_stock_list', {
