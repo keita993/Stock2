@@ -1053,20 +1053,10 @@ def change_password():
         return jsonify({'success': False, 'message': 'パスワードの変更中にエラーが発生しました'}), 500
 
 if __name__ == '__main__':
-    try:
-        print("Flaskアプリケーションを起動中...")
-        # データベースの初期化
-        with app.app_context():
-            try:
-                print("データベースを初期化中...")
-                db.create_all()  # テーブルを作成（存在しない場合のみ）
-                print("データベースの初期化が完了しました")
-            except Exception as e:
-                print(f"データベースの初期化中にエラーが発生しました: {str(e)}")
-                print(traceback.format_exc())
-        
-        # アプリケーションの起動
-        app.run(debug=True, host='127.0.0.1', port=5000)
-    except Exception as e:
-        print(f"アプリケーション起動中にエラーが発生しました: {str(e)}")
-        print(traceback.format_exc()) 
+    print("Flaskアプリケーションを起動中...")
+    print("データベースを初期化中...")
+    with app.app_context():
+        db.create_all()
+    print("データベースの初期化が完了しました")
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True) 
