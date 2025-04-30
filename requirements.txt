@@ -5,3 +5,4 @@ pandas_ta
 python-dotenv
 PyJWT
 flask_sqlalchemy
+flask_wtf
