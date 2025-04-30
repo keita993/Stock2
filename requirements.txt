@@ -4,3 +4,4 @@ pandas
 pandas_ta
 python-dotenv
 PyJWT
+flask_sqlalchemy
