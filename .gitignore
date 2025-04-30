@@ -44,4 +44,9 @@ Thumbs.db
 
 # Database
 *.db
-*.sqlite3 
+*.sqlite3
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log* 
