@@ -1147,6 +1147,7 @@
             const sellThreshold = parseFloat(document.getElementById('sellThreshold').value);
             const disableSell = document.getElementById('disableSell').checked;
             const shares = parseInt(document.getElementById('shares').value) || 100;
+            const period = parseInt(document.getElementById('period').value) || 730;
 
             try {
                 const response = await fetch('/run_backtest', {
@@ -1160,7 +1161,8 @@
                         buy_threshold: buyThreshold,
                         sell_threshold: sellThreshold,
                         disable_sell: disableSell,
-                        shares: shares
+                        shares: shares,
+                        period: period
                     })
                 });
 
