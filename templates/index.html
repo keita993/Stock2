@@ -915,7 +915,7 @@
         }
 
         function removeFromPortfolio(ticker) {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('authToken');
             if (!token) {
                 alert('ログインが必要です');
                 return;

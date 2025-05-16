@@ -85,13 +85,12 @@ class Portfolio(db.Model):
 # データベースの初期化
 with app.app_context():
     try:
-        print("データベースを初期化中...")
+       
         # テーブルが存在しない場合のみ作成
         db.create_all()
-        print("データベースの初期化が完了しました")
+        
     except Exception as e:
         print(f"データベースの初期化中にエラーが発生しました: {str(e)}")
-        print(traceback.format_exc())
 
 def calculate_rsi(data, period=14):
     """RSIを計算する"""

@@ -1,5 +1,5 @@
 flask
-yfinance
+yfinance==0.2.59
 pandas
 pandas_ta
 python-dotenv
