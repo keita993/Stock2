@@ -12,6 +12,10 @@ import jwt
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from functools import wraps
+from stock_analyzer import analyze_stocks
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing
+from tqdm import tqdm
 
 # CSRF保護の初期化
 csrf = CSRFProtect()
@@ -75,12 +79,19 @@ class User(db.Model):
 # ポートフォリオモデルの定義
 class Portfolio(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    ticker = db.Column(db.String(20), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # 外部キーを追加
+    symbol = db.Column(db.String(20), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    current_price = db.Column(db.Float, nullable=False)
+    shares = db.Column(db.Integer, nullable=False)
+    total_amount = db.Column(db.Float, nullable=False)
+    expected_value = db.Column(db.Float, nullable=False)
+    win_rate = db.Column(db.Float, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
-        return f'<Portfolio {self.ticker} for User {self.user_id}>'
+        return f'<Portfolio {self.symbol}>'
 
 # データベースの初期化
 with app.app_context():
@@ -112,20 +123,14 @@ def calculate_rsi(data, period=14):
         # RSIを計算
         rsi = 100 - (100 / (1 + rs))
         
-        print(f"RSI計算結果のサンプル: {rsi.head()}")
-        print(f"RSIの統計情報: 平均={rsi.mean():.2f}, 最小={rsi.min():.2f}, 最大={rsi.max():.2f}")
-        
         return rsi
     except Exception as e:
-        print(f"RSI計算中にエラーが発生しました: {str(e)}")
-        print(traceback.format_exc())
         return pd.Series([None] * len(data), index=data.index)
 
 def calculate_bollinger_bands(data, period=20, num_std=3):
     """ボリンジャーバンドを計算する"""
     try:
         if data is None or data.empty:
-            print("データが空です")
             return None, None, None, None
 
         # 移動平均を計算
@@ -142,21 +147,76 @@ def calculate_bollinger_bands(data, period=20, num_std=3):
         deviation_upper = ((data['Close'] - upper_band) / upper_band) * 100
         deviation_lower = ((data['Close'] - lower_band) / lower_band) * 100
         
-        print(f"ボリンジャーバンド計算結果のサンプル:")
-        print(f"上バンド: {upper_band.head()}")
-        print(f"下バンド: {lower_band.head()}")
-        print(f"乖離率(上): {deviation_upper.head()}")
-        print(f"乖離率(下): {deviation_lower.head()}")
-        
         return upper_band, lower_band, deviation_upper, deviation_lower
     except Exception as e:
-        print(f"ボリンジャーバンド計算中にエラーが発生しました: {str(e)}")
-        print(traceback.format_exc())
         return None, None, None, None
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/analyze')
+def analyze():
+    try:
+        market = request.args.get('market', 'prime')  # デフォルトはプライム市場
+        stock_list_file = 'growth_list.csv' if market == 'growth' else 'prime_list.csv'
+        
+        # 銘柄リストの読み込み
+        df = pd.read_csv(stock_list_file)
+        symbols = df['コード'].astype(str).tolist()
+        
+        # 分析の実行（並列処理）
+        results = []
+        total_stocks = len(symbols)
+        analyzed_stocks = 0
+        
+        # CPUコア数を取得（-1で全コア使用）
+        max_workers = multiprocessing.cpu_count() * 8  # コア数の8倍のワーカーを使用
+        
+        print(f"\n{market}市場の分析を開始します...")
+        
+        # バッチサイズを設定（一度に処理する銘柄数）
+        batch_size = 200  # バッチサイズを増加
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 進捗バーの初期化
+            pbar = tqdm(total=total_stocks, desc="分析進捗", unit="銘柄", ncols=80)
+            
+            # バッチ処理
+            for i in range(0, total_stocks, batch_size):
+                batch_symbols = symbols[i:i + batch_size]
+                
+                # 各銘柄の分析を並列実行
+                future_to_symbol = {
+                    executor.submit(analyze_single_stock, symbol): symbol 
+                    for symbol in batch_symbols
+                }
+                
+                # 完了した分析結果を収集
+                for future in as_completed(future_to_symbol):
+                    symbol = future_to_symbol[future]
+                    try:
+                        result = future.result()
+                        if result and result['expected_value'] >= 30:
+                            results.append(result)
+                            analyzed_stocks += 1
+                    except Exception:
+                        pass
+                    finally:
+                        pbar.update(1)
+            
+            pbar.close()
+        
+        print(f"\n分析完了: {analyzed_stocks}件の銘柄が見つかりました")
+        
+        return jsonify({
+            'results': results,
+            'total_stocks': total_stocks,
+            'analyzed_stocks': analyzed_stocks
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 def normalize_ticker(ticker):
     """銘柄コードを正規化する"""
@@ -259,8 +319,6 @@ def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_s
         latest_price = latest_data['close']
         latest_date = latest_data['date']
         
-        print(f"最新の日付: {latest_date}, 価格: {latest_price}")  # デバッグ用
-
         # バックテスト用にデータを古い順にソート
         sorted_data_oldest_first = sorted(stock_data,
                                         key=lambda x: datetime.strptime(x['date'], '%Y-%m-%d').replace(tzinfo=None))
@@ -348,6 +406,10 @@ def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_s
             total_profit_amount = sum(t['profit_amount'] for t in trades)
             average_profit_rate = sum(t['profit_rate'] for t in trades) / total_trades
             
+            # 最大損失の計算（負の利益率の取引のみから計算）
+            losing_trades_profits = [t['profit_rate'] for t in trades if t['profit_rate'] < 0]
+            max_loss = min(losing_trades_profits) if losing_trades_profits else 0
+            
             # 売却日ごとの利益率を平均化
             sell_date_profits = {}
             for trade in trades:
@@ -372,6 +434,7 @@ def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_s
             total_profit_amount = 0
             total_profit_rate = 0
             average_profit_rate = 0
+            max_loss = 0
         
         return {
             'trades': trades,
@@ -382,7 +445,8 @@ def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_s
                 'win_rate': (winning_trades / total_trades * 100) if total_trades > 0 else 0,
                 'total_profit_rate': total_profit_rate,
                 'total_profit_amount': total_profit_amount,
-                'average_profit_rate': average_profit_rate
+                'average_profit_rate': average_profit_rate,
+                'max_loss': max_loss
             }
         }
     except Exception as e:
@@ -510,12 +574,8 @@ def calculate_sdi(data, period=20):
         sdi = ((sdi - sdi.min()) / (sdi.max() - sdi.min())) * (max_sdi - min_sdi) + min_sdi
         # 0〜100の範囲に収める
         sdi = sdi.clip(0, 100)
-        print(f"SDI計算結果のサンプル: {sdi.head()}")
-        print(f"SDIの統計情報: 平均={sdi.mean():.2f}, 最小={sdi.min():.2f}, 最大={sdi.max():.2f}")
         return sdi
     except Exception as e:
-        print(f"SDI計算中にエラーが発生しました: {str(e)}")
-        print(traceback.format_exc())
         return pd.Series([None] * len(data), index=data.index)
 
 def get_latest_stock_info(ticker_to_fetch):
@@ -750,88 +810,105 @@ def remove_from_portfolio():
             'message': f'エラーが発生しました: {str(e)}'
         }), 500
 
-@app.route('/get_portfolio_data', methods=['POST'])
-def get_portfolio_data():
+@app.route('/get_portfolio', methods=['GET'])
+def get_portfolio():
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'message': 'リクエストデータがありません'
-            }), 400
+        portfolios = Portfolio.query.all()
+        portfolio_list = []
+        total_investment = 0
+        total_value = 0
+        total_profit = 0
+        total_profit_rate = 0
 
-        token = data.get('token')
-        if not token:
-            return jsonify({
-                'success': False,
-                'message': 'トークンがありません'
-            }), 401
+        for portfolio in portfolios:
+            # 最新の株価情報を取得
+            stock_info = get_latest_stock_info(portfolio.symbol)
+            if stock_info and 'error' not in stock_info:
+                current_price = stock_info['latest_price']
+                if current_price is not None:
+                    # 現在の評価額と損益を計算
+                    current_value = current_price * portfolio.shares
+                    profit_amount = current_value - portfolio.total_amount
+                    profit_rate = (profit_amount / portfolio.total_amount) * 100
 
-        try:
-            # トークンの検証
-            payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            username = payload['user']
-            
-            # ユーザーの取得
-            user = User.query.filter_by(username=username).first()
-            if not user:
-                return jsonify({
-                    'success': False,
-                    'message': 'ユーザーが見つかりません'
-                }), 404
+                    total_investment += portfolio.total_amount
+                    total_value += current_value
+                    total_profit += profit_amount
+                    total_profit_rate += profit_rate
 
-            # ユーザーのポートフォリオを取得
-            portfolios = Portfolio.query.filter_by(user_id=user.id).all()
-            
-            # 株価データを取得
-            portfolio_data = []
-            for portfolio in portfolios:
-                try:
-                    if not portfolio.ticker:
-                        print(f"警告: ポートフォリオID {portfolio.id} の銘柄コードが空です")
-                        continue
-
-                    stock_info = get_latest_stock_info(portfolio.ticker)
-                    if stock_info and 'error' not in stock_info:
-                        portfolio_data.append(stock_info)
-                    else:
-                        error_msg = stock_info.get('error', '株価データの取得に失敗しました') if stock_info else '株価データの取得に失敗しました'
-                        portfolio_data.append({
-                            'ticker': portfolio.ticker,
-                            'name': f"{portfolio.ticker} (取得失敗)",
-                            'latest_price': None,
-                            'short_term_expectation': None,
-                            'error': error_msg
-                        })
-                except Exception as e:
-                    print(f"銘柄 {portfolio.ticker} のデータ取得中にエラー: {str(e)}")
-                    portfolio_data.append({
-                        'ticker': portfolio.ticker,
-                        'name': f"{portfolio.ticker} (エラー)",
-                        'latest_price': None,
-                        'short_term_expectation': None,
-                        'error': str(e)
+                    portfolio_list.append({
+                        'symbol': portfolio.symbol,
+                        'name': portfolio.name,
+                        'current_price': current_price,
+                        'shares': portfolio.shares,
+                        'total_amount': portfolio.total_amount,
+                        'current_value': current_value,
+                        'profit_rate': profit_rate,
+                        'profit_amount': profit_amount,
+                        'expected_value': portfolio.expected_value,
+                        'win_rate': portfolio.win_rate
                     })
 
-            return jsonify({
-                'success': True,
-                'portfolio_data': portfolio_data
-            })
+        avg_profit_rate = total_profit_rate / len(portfolios) if portfolios else 0
+        avg_profit_amount = total_profit / len(portfolios) if portfolios else 0
+        total_profit_rate_value = (total_profit / total_investment) * 100 if total_investment > 0 else 0
 
-        except jwt.ExpiredSignatureError:
-            return jsonify({
-                'success': False,
-                'message': 'トークンの有効期限が切れています'
-            }), 401
-        except jwt.InvalidTokenError:
-            return jsonify({
-                'success': False,
-                'message': '無効なトークンです'
-            }), 401
+        return jsonify({
+            'success': True,
+            'portfolio_list': portfolio_list,
+            'summary': {
+                'total_investment': total_investment,
+                'total_value': total_value,
+                'total_profit': total_profit,
+                'total_profit_rate': total_profit_rate_value,
+                'avg_profit_rate': avg_profit_rate,
+                'avg_profit_amount': avg_profit_amount
+            }
+        })
 
     except Exception as e:
-        print(f"ポートフォリオデータ取得中にエラー: {str(e)}")
-        print(traceback.format_exc())
+        print(f"ポートフォリオ取得中にエラー: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'エラーが発生しました: {str(e)}'
+        }), 500
+
+@app.route('/update_portfolio', methods=['POST'])
+def update_portfolio():
+    try:
+        data = request.get_json()
+        if not data or 'portfolio_list' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'リクエストデータが不正です'
+            }), 400
+
+        # 既存のポートフォリオを全て削除
+        Portfolio.query.delete()
+
+        # 新しいポートフォリオを追加
+        for item in data['portfolio_list']:
+            portfolio = Portfolio(
+                symbol=item['symbol'],
+                name=item['name'],
+                current_price=item['current_price'],
+                shares=item['shares'],
+                total_amount=item['total_amount'],
+                expected_value=item['expected_value'],
+                win_rate=item['win_rate']
+            )
+            db.session.add(portfolio)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'ポートフォリオを更新しました'
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"ポートフォリオ更新中にエラー: {str(e)}")
         return jsonify({
             'success': False,
             'message': f'エラーが発生しました: {str(e)}'
@@ -839,50 +916,61 @@ def get_portfolio_data():
 
 def get_stock_data(ticker, period):
     """株価データを取得する"""
-    ticker_to_fetch = normalize_ticker(ticker)
-    stock = yf.Ticker(ticker_to_fetch)
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=period)
-    hist = stock.history(start=start_date, end=end_date)
-    
-    if hist.empty:
-        raise Exception(f"銘柄コード '{ticker}' のデータが見つかりませんでした。")
-    
-    # RSIとボリンジャーバンドを計算
-    rsi = calculate_rsi(hist)
-    upper_band, lower_band, deviation_upper, deviation_lower = calculate_bollinger_bands(hist)
-    
-    stock_data = []
-    for date, row in hist.iterrows():
-        current_rsi = rsi.loc[date] if date in rsi.index else None
-        current_lower_deviation = deviation_lower.loc[date] if date in deviation_lower.index else None
+    try:
+        ticker_to_fetch = normalize_ticker(ticker)
+        stock = yf.Ticker(ticker_to_fetch)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=period)
+        hist = stock.history(start=start_date, end=end_date)
         
-        rsi_value = round(float(current_rsi), 2) if not pd.isna(current_rsi) else None
-        lower_deviation_value = round(float(current_lower_deviation), 2) if not pd.isna(current_lower_deviation) else None
+        if hist.empty:
+            raise Exception(f"銘柄コード '{ticker}' のデータが見つかりませんでした。")
         
-        short_term_expectation = None
-        if rsi_value is not None and lower_deviation_value is not None:
-            rsi_component = 50 - rsi_value
-            deviation_component = abs(min(0, lower_deviation_value))
-            raw_expectation = rsi_component + deviation_component
-            short_term_expectation = round(raw_expectation * 2, 2) if raw_expectation >= 0 else round(raw_expectation, 2)
+        # RSIとボリンジャーバンドを計算
+        rsi = calculate_rsi(hist)
+        upper_band, lower_band, deviation_upper, deviation_lower = calculate_bollinger_bands(hist)
         
-        # 日付をYYYY-MM-DD形式の文字列に変換（Chart.jsに適した形式）
-        date_str = date.strftime('%Y-%m-%d')
+        stock_data = []
+        for date, row in hist.iterrows():
+            try:
+                current_rsi = rsi.loc[date] if date in rsi.index else None
+                current_lower_deviation = deviation_lower.loc[date] if date in deviation_lower.index else None
+                
+                rsi_value = round(float(current_rsi), 2) if not pd.isna(current_rsi) else None
+                lower_deviation_value = round(float(current_lower_deviation), 2) if not pd.isna(current_lower_deviation) else None
+                
+                short_term_expectation = None
+                if rsi_value is not None and lower_deviation_value is not None:
+                    rsi_component = 50 - rsi_value
+                    deviation_component = abs(min(0, lower_deviation_value))
+                    raw_expectation = rsi_component + deviation_component
+                    short_term_expectation = round(raw_expectation * 2, 2) if raw_expectation >= 0 else round(raw_expectation, 2)
+                
+                date_str = date.strftime('%Y-%m-%d')
+                
+                stock_data.append({
+                    'date': date_str,
+                    'open': float(row['Open']),
+                    'high': float(row['High']),
+                    'low': float(row['Low']),
+                    'close': float(row['Close']),
+                    'volume': int(row['Volume']),
+                    'rsi': rsi_value,
+                    'lower_deviation': lower_deviation_value,
+                    'short_term_expectation': short_term_expectation
+                })
+            except (ValueError, TypeError, KeyError) as e:
+                print(f"データ処理中にエラー: Date={date}, Data={row}, エラー: {str(e)}")
+                continue
         
-        stock_data.append({
-            'date': date_str,
-            'open': float(row['Open']),
-            'high': float(row['High']),
-            'low': float(row['Low']),
-            'close': float(row['Close']),
-            'volume': int(row['Volume']),
-            'rsi': rsi_value,
-            'lower_deviation': lower_deviation_value,
-            'short_term_expectation': short_term_expectation
-        })
-    
-    return stock_data
+        if not stock_data:
+            raise Exception(f"銘柄コード '{ticker}' の有効なデータが見つかりませんでした。")
+            
+        return stock_data
+        
+    except Exception as e:
+        print(f"株価データ取得中にエラー: {str(e)}")
+        raise Exception(f"銘柄コード '{ticker}' のデータ取得に失敗しました: {str(e)}")
 
 def get_stock_name(ticker):
     """銘柄名を取得する"""
@@ -899,157 +987,64 @@ def get_stock_name(ticker):
         stock_name = ticker_to_fetch
     return stock_name
 
-# ユーザー登録エンドポイント
-@app.route('/register', methods=['POST'])
-def register():
+def analyze_single_stock(symbol):
+    """単一銘柄の分析を行う"""
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'success': False,
-                'message': 'リクエストデータがありません'
-            }), 400
-
-        username = data.get('username')
-        password = data.get('password')
-
-        if not username or not password:
-            return jsonify({
-                'success': False,
-                'message': 'ユーザー名とパスワードは必須です'
-            }), 400
-
-        # ユーザー名の重複チェック
-        if User.query.filter_by(username=username).first():
-            return jsonify({
-                'success': False,
-                'message': 'このユーザー名は既に使用されています'
-            }), 400
-
-        # パスワードのハッシュ化
-        hashed_password = generate_password_hash(password)
+        # 銘柄コードの正規化
+        ticker = normalize_ticker(symbol)
         
-        # ユーザー情報をデータベースに保存
-        new_user = User(username=username, password_hash=hashed_password)
-        db.session.add(new_user)
-        db.session.commit()
-
-        return jsonify({
-            'success': True,
-            'message': 'ユーザー登録が完了しました'
-        })
-
+        # 株価データの取得（期間を1年に短縮）
+        stock_data = get_stock_data(ticker, 365)  # 1年分のデータを取得
+        
+        if not stock_data:
+            return None
+            
+        # 最新のデータを取得
+        latest_data = stock_data[0]
+        
+        # 移動平均の計算（最新の20日分のみを使用）
+        closes = [d['close'] for d in stock_data[:20]]
+        ma20 = sum(closes) / len(closes) if len(closes) == 20 else None
+        
+        # 期待値の計算（最新の30日分のみを使用）
+        expected_values = [d['short_term_expectation'] for d in stock_data[:30] if d['short_term_expectation'] is not None]
+        if not expected_values:
+            return None
+            
+        current_expected_value = expected_values[0]
+        max_expected_value = max(expected_values)
+        min_expected_value = min(expected_values)
+        
+        # バックテストの実行（期間を短縮）
+        backtest_result = calculate_backtest(stock_data[:180])  # 6ヶ月分のデータでバックテスト
+        
+        # バックテスト結果の取得
+        backtest_performance = None
+        if backtest_result and 'performance' in backtest_result:
+            backtest_performance = {
+                'win_rate': backtest_result['performance'].get('win_rate', 0),
+                'avg_profit': backtest_result['performance'].get('average_profit_rate', 0),
+                'max_profit': backtest_result['performance'].get('total_profit_rate', 0),
+                'max_loss': backtest_result['performance'].get('max_loss', 0),
+                'total_trades': backtest_result['performance'].get('total_trades', 0)
+            }
+        
+        # 結果の作成
+        result = {
+            'symbol': symbol,
+            'name': get_stock_name(symbol),
+            'current_price': latest_data['close'],
+            'ma20': ma20 if ma20 is not None else latest_data['close'],
+            'expected_value': current_expected_value,
+            'max_expected_value': max_expected_value,
+            'min_expected_value': min_expected_value,
+            'backtest': backtest_performance
+        }
+        
+        return result
+        
     except Exception as e:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': f'登録中にエラーが発生しました: {str(e)}'
-        }), 500
-
-# ログインエンドポイント
-@app.route('/login', methods=['POST'])
-def login():
-    try:
-        data = request.get_json()
-        print(f"ログインリクエストデータ: {data}")  # デバッグログ
-
-        if not data:
-            return jsonify({
-                'success': False,
-                'message': 'リクエストデータがありません'
-            }), 400
-
-        username = data.get('username')
-        password = data.get('password')
-
-        print(f"ログイン試行 - ユーザー名: {username}")  # デバッグログ（パスワードはログに含めない）
-
-        if not username or not password:
-            return jsonify({
-                'success': False,
-                'message': 'ユーザー名とパスワードは必須です'
-            }), 400
-
-        # データベースからユーザーを検索
-        user = User.query.filter_by(username=username).first()
-        
-        if user and check_password_hash(user.password_hash, password):
-            print(f"認証成功 - ユーザー: {username}")  # デバッグログ
-            
-            # トークン生成
-            token = jwt.encode({
-                'user': username,
-                'exp': datetime.utcnow() + timedelta(hours=24)
-            }, app.config['SECRET_KEY'], algorithm='HS256')
-
-            print(f"生成されたトークン: {token}")  # デバッグログ
-
-            return jsonify({
-                'success': True,
-                'token': token
-            })
-        else:
-            print(f"認証失敗 - ユーザー: {username}")  # デバッグログ
-            return jsonify({
-                'success': False,
-                'message': 'ユーザー名またはパスワードが正しくありません'
-            }), 401
-
-    except Exception as e:
-        print(f"ログインエラー: {str(e)}")
-        print(f"エラータイプ: {type(e)}")
-        print(f"エラー引数: {e.args}")
-        print(f"スタックトレース: {traceback.format_exc()}")
-        
-        return jsonify({
-            'success': False,
-            'message': f'ログイン中にエラーが発生しました: {str(e)}'
-        }), 500
-
-@app.route('/change_password', methods=['POST'])
-@require_auth
-def change_password():
-    try:
-        data = request.get_json()
-        current_password = data.get('current_password')
-        new_password = data.get('new_password')
-        
-        if not current_password or not new_password:
-            return jsonify({'success': False, 'message': '現在のパスワードと新しいパスワードを入力してください'}), 400
-        
-        # トランザクションの開始
-        db.session.begin()
-        
-        try:
-            # ユーザー情報の取得（ロックをかけて）
-            user = User.query.filter_by(username=request.user).with_for_update().first()
-            if not user:
-                db.session.rollback()
-                return jsonify({'success': False, 'message': 'ユーザーが見つかりません'}), 404
-            
-            # 現在のパスワードの確認
-            if not check_password_hash(user.password_hash, current_password):
-                db.session.rollback()
-                return jsonify({'success': False, 'message': '現在のパスワードが正しくありません'}), 401
-            
-            # 新しいパスワードのハッシュ化と保存
-            user.password_hash = generate_password_hash(new_password)
-            
-            # 変更をコミット
-            db.session.commit()
-            
-            print(f"パスワード変更成功 - ユーザー: {request.user}")  # デバッグログ
-            
-            return jsonify({'success': True, 'message': 'パスワードが変更されました'})
-            
-        except Exception as e:
-            db.session.rollback()
-            print(f"パスワード変更中のエラー: {str(e)}")  # デバッグログ
-            raise
-            
-    except Exception as e:
-        print(f"パスワード変更エラー: {str(e)}")
-        return jsonify({'success': False, 'message': 'パスワードの変更中にエラーが発生しました'}), 500
+        return None
 
 if __name__ == '__main__':
     print("Flaskアプリケーションを起動中...")
