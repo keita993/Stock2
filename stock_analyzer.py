@@ -69,7 +69,6 @@ def get_stock_data(symbol, period='2y'):
 def calculate_expected_value(hist_data):
     """
     株価期待値を計算（RSIとボリンジャーバンドの複合計算）
-    2年分のデータを使用して、より長期的な傾向を考慮
     """
     if hist_data is None or len(hist_data) < 20:
         return None, None, None
@@ -115,14 +114,6 @@ def calculate_expected_value(hist_data):
         max_expected_value = max(expected_values)
         min_expected_value = min(expected_values)
         
-        # 2年分のデータを使用した場合の補正
-        # より長期的な傾向を考慮するため、現在の期待値に重み付け
-        if len(expected_values) > 252:  # 1年分以上のデータがある場合
-            recent_values = expected_values[-252:]  # 直近1年分のデータ
-            recent_avg = sum(recent_values) / len(recent_values)
-            # 現在の期待値と直近1年の平均を考慮
-            current_expected_value = (current_expected_value * 0.7 + recent_avg * 0.3)
-        
         return current_expected_value, max_expected_value, min_expected_value
         
     except Exception as e:
@@ -144,9 +135,10 @@ def get_stock_name(symbol):
         print(f"銘柄名の取得に失敗: {symbol}, エラー: {e}")
         return symbol
 
-def calculate_backtest(hist_data, expected_values, buy_threshold=30, sell_threshold=0):
+def calculate_backtest(hist_data, expected_values, buy_threshold=50, sell_threshold=-10):
     """
     バックテストを実行し、勝率を計算
+    期待値が50以上で買い付け、-10以下で売却
     """
     if hist_data is None or len(hist_data) < 20 or len(expected_values) < 20:
         return None
@@ -167,7 +159,7 @@ def calculate_backtest(hist_data, expected_values, buy_threshold=30, sell_thresh
             current_price = prices[i]
             current_expectation = expectations[i]
             
-            # 買いシグナル
+            # 買いシグナル（期待値が50以上）
             if position is None and current_expectation >= buy_threshold:
                 position = {
                     'buy_date': dates[i],
@@ -175,7 +167,7 @@ def calculate_backtest(hist_data, expected_values, buy_threshold=30, sell_thresh
                     'buy_expectation': current_expectation
                 }
             
-            # 売りシグナル
+            # 売りシグナル（期待値が-10以下）
             elif position is not None and current_expectation <= sell_threshold:
                 profit_rate = ((current_price - position['buy_price']) / position['buy_price']) * 100
                 trades.append({
