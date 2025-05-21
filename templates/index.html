@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>株価期待値分析</title>
+    <title>株価期待値シュミレーションアプリ</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <style>
         .loading {
@@ -20,12 +21,78 @@
         }
         .container { margin-top: 30px; }
         .btn { margin: 5px; }
+        .modal-backdrop {
+            z-index: 1040;
+        }
+        .modal {
+            z-index: 1050;
+        }
+        .modal-dialog {
+            z-index: 1060;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 1000px;
+            border-radius: 5px;
+        }
+        .btn-close {
+            position: absolute;
+            right: 1rem;
+            top: 1rem;
+        }
+        .chart-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+
+        .chart-btn:hover {
+            background-color: #45a049;
+        }
+
+        .sell-btn {
+            background-color: #f44336;
+            color: white;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .sell-btn:hover {
+            background-color: #da190b;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+
+        .action-buttons .btn {
+            padding: 2px 8px;
+            font-size: 0.875rem;
+            margin: 0;
+        }
+
+        .table td {
+            vertical-align: middle;
+            padding: 0.5rem;
+        }
     </style>
 </head>
 <body>
     <div class="container mt-5">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="mb-0">株価期待値分析</h1>
+            <h1 class="mb-0">株価期待値シュミレーションアプリ</h1>
         </div>
 
         <div class="row">
@@ -38,8 +105,6 @@
                     <label for="market-growth">グロース</label>
                 </div>
                 <button type="button" onclick="analyzeStocks()" class="btn btn-primary">分析開始</button>
-                <button id="sortByWinRateBtn" class="btn btn-secondary ms-2" disabled>勝率でソート</button>
-                <button id="sortByExpectedValueBtn" class="btn btn-secondary ms-2" disabled>期待値でソート</button>
                 <button type="button" onclick="showTrades()" class="btn btn-info ms-2">取引履歴</button>
             </div>
         </div>
@@ -98,7 +163,13 @@
                 </div>
             </div>
 
-            <h3>分析結果</h3>
+            <div class="d-flex align-items-center mb-3">
+                <h3 class="mb-0 me-3">分析結果</h3>
+                <div class="btn-group">
+                    <button id="sortByWinRateBtn" class="btn btn-sm btn-outline-secondary" disabled>勝率でソート</button>
+                    <button id="sortByExpectedValueBtn" class="btn btn-sm btn-outline-secondary" disabled>期待値でソート</button>
+                </div>
+            </div>
             <div class="table-responsive">
                 <table class="table table-striped">
                     <thead>
@@ -106,7 +177,6 @@
                             <th>銘柄コード</th>
                             <th>銘柄名</th>
                             <th>現在値</th>
-                            <th>MA20</th>
                             <th>期待値</th>
                             <th>勝率</th>
                             <th>平均利益率</th>
@@ -123,14 +193,12 @@
         </div>
 
         <!-- チャート表示用モーダル -->
-        <div class="modal fade" id="chartModal" tabindex="-1" role="dialog" aria-labelledby="chartModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-lg" role="document">
+        <div class="modal fade" id="chartModal" tabindex="-1" aria-labelledby="chartModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title" id="chartModalLabel">株価チャート</h5>
-                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
                         <div id="stockChart" style="height: 400px;"></div>
@@ -183,6 +251,9 @@
     <script>
         let currentResults = [];  // 現在の分析結果を保持
         let currentMarket = 'prime';  // 現在選択されている市場
+        let currentChart = null;
+        let isChartLoading = false;
+        let chartModal = null;
 
         // 市場選択の変更を監視
         document.querySelectorAll('input[name="market"]').forEach(radio => {
@@ -228,7 +299,7 @@
                     // 保存された市場を選択（新しい分析を開始する場合は上書きしない）
                     if (!document.querySelector('input[name="market"]:checked')) {
                         currentMarket = savedMarket;
-                        document.querySelector(`input[name="market"][value="${savedMarket}"]`).checked = true;
+                    document.querySelector(`input[name="market"][value="${savedMarket}"]`).checked = true;
                     }
                     
                     return true;
@@ -323,23 +394,59 @@
                     <td>${result.symbol}</td>
                     <td>${result.name}</td>
                     <td>${result.current_price.toFixed(2)}</td>
-                    <td>${result.ma20.toFixed(2)}</td>
                     <td>${result.expected_value.toFixed(2)}</td>
                     <td>${result.backtest ? result.backtest.win_rate.toFixed(2) : '-'}</td>
-                    <td>${result.backtest ? result.backtest.avg_profit.toFixed(2) : '-'}</td>
+                    <td class="${result.backtest && result.backtest.avg_profit >= 0 ? 'text-success' : 'text-danger'}">${result.backtest ? result.backtest.avg_profit.toFixed(2) : '-'}</td>
                     <td>${result.backtest ? result.backtest.max_profit.toFixed(2) : '-'}</td>
-                    <td>${result.backtest ? result.backtest.max_loss.toFixed(2) : '-'}</td>
+                    <td class="${result.backtest && result.backtest.max_loss >= 0 ? 'text-success' : 'text-danger'}">${result.backtest ? result.backtest.max_loss.toFixed(2) : '-'}</td>
                     <td>${result.backtest ? result.backtest.total_trades : '-'}</td>
                     <td>
+                        <div class="action-buttons">
                         <button class="btn btn-sm btn-info" onclick="showChart('${result.symbol}')">チャート</button>
-                        <button class="btn btn-sm btn-success" onclick="showBuyModal('${result.symbol}', '${result.name}', ${result.current_price})">購入</button>
+                            <button class="btn btn-sm btn-success" onclick="showBuyModal('${result.symbol}', '${result.name}', ${result.current_price})">購入</button>
+                        </div>
                     </td>
                 `;
                 tbody.appendChild(row);
             });
         }
 
+        // ページ読み込み時にモーダルを初期化
+        document.addEventListener('DOMContentLoaded', function() {
+            const modalElement = document.getElementById('chartModal');
+            chartModal = new bootstrap.Modal(modalElement, {
+                backdrop: 'static',
+                keyboard: false
+            });
+
+            // モーダルが閉じられた時の処理
+            modalElement.addEventListener('hidden.bs.modal', function () {
+                if (currentChart) {
+                    currentChart.destroy();
+                    currentChart = null;
+                }
+                // バックドロップを強制的に削除
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop) {
+                    backdrop.remove();
+                }
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            });
+        });
+
+        // チャートを表示する関数
         function showChart(symbol) {
+            if (isChartLoading) {
+                alert('チャートの読み込み中です。しばらくお待ちください。');
+                return;
+            }
+
+            isChartLoading = true;
+            const chartContainer = document.querySelector("#stockChart");
+            chartContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+
             fetch('/get_stock_list', {
                 method: 'POST',
                 headers: {
@@ -350,17 +457,30 @@
                     period: 365
                 })
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('データの取得に失敗しました');
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.error) {
-                    alert('エラーが発生しました: ' + data.error);
-                    return;
+                    throw new Error(data.error);
                 }
                 
                 const stockData = data.stock_data;
-                const dates = stockData.map(d => d.date);
-                const prices = stockData.map(d => d.close);
-                const expectations = stockData.map(d => d.short_term_expectation);
+                if (!stockData || stockData.length === 0) {
+                    throw new Error('株価データが取得できませんでした');
+                }
+
+                // データの前処理
+                const dates = stockData.map(d => d.date).filter(date => date);
+                const prices = stockData.map(d => d.close).filter(price => price !== null && price !== undefined);
+                const expectations = stockData.map(d => d.short_term_expectation).filter(exp => exp !== null && exp !== undefined);
+
+                if (dates.length === 0 || prices.length === 0) {
+                    throw new Error('有効なデータがありません');
+                }
                 
                 const options = {
                     series: [{
@@ -372,10 +492,33 @@
                     }],
                     chart: {
                         type: 'line',
-                        height: 400
+                        height: 400,
+                        animations: {
+                            enabled: true,
+                            easing: 'linear',
+                            dynamicAnimation: {
+                                speed: 1000
+                            }
+                        },
+                        toolbar: {
+                            show: true,
+                            tools: {
+                                download: true,
+                                selection: true,
+                                zoom: true,
+                                zoomin: true,
+                                zoomout: true,
+                                pan: true,
+                                reset: true
+                            }
+                        }
                     },
                     xaxis: {
-                        categories: dates
+                        categories: dates,
+                        type: 'datetime',
+                        labels: {
+                            datetimeUTC: false
+                        }
                     },
                     yaxis: [{
                         title: {
@@ -400,18 +543,37 @@
                         }
                     }],
                     title: {
-                        text: data.stock_name
+                        text: `${data.stock_name} (${symbol})`
+                    },
+                    tooltip: {
+                        shared: true,
+                        intersect: false,
+                        x: {
+                            format: 'yyyy/MM/dd'
+                        }
                     }
                 };
                 
-                const chart = new ApexCharts(document.querySelector("#stockChart"), options);
-                chart.render();
+                // 既存のチャートを破棄
+                if (currentChart) {
+                    currentChart.destroy();
+                    currentChart = null;
+                }
                 
-                $('#chartModal').modal('show');
+                // 新しいチャートを作成
+                currentChart = new ApexCharts(chartContainer, options);
+                currentChart.render();
+                
+                // モーダルを表示
+                chartModal.show();
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('チャートの表示中にエラーが発生しました');
+                alert(error.message || 'チャートの表示中にエラーが発生しました');
+                chartContainer.innerHTML = '<div class="alert alert-danger">チャートの表示に失敗しました</div>';
+            })
+            .finally(() => {
+                isChartLoading = false;
             });
         }
 
@@ -610,13 +772,25 @@
         // 保有中の銘柄を表示
         loadOpenTrades();
 
-        // 保有中の銘柄を表示する関数
-        function loadOpenTrades() {
-            fetch('/get_trades?status=open')
-                .then(response => response.json())
-                .then(async data => {
+        // ウィンドウのリサイズ時の処理
+        window.addEventListener('resize', function() {
+            if (currentChart) {
+                currentChart.updateOptions({
+                    chart: {
+                        height: 400
+                    }
+                });
+            }
+        });
+
+        // 保有銘柄の読み込み
+        async function loadOpenTrades() {
+            try {
+                const response = await fetch('/get_trades?status=open');
+                const data = await response.json();
+                
                     if (data.error) {
-                        console.error('エラーが発生しました: ' + data.error);
+                    console.error('Error:', data.error);
                         return;
                     }
                     
@@ -624,121 +798,95 @@
                     tbody.innerHTML = '';
                     
                     if (data.trades.length === 0) {
-                        const row = document.createElement('tr');
-                        row.innerHTML = '<td colspan="9" class="text-center">保有中の銘柄はありません</td>';
-                        tbody.appendChild(row);
-                        document.getElementById('totalInvestment').textContent = '0';
-                        document.getElementById('totalProfitLoss').textContent = '0';
-                        document.getElementById('averageProfitLossRate').textContent = '0.00';
+                    const row = tbody.insertRow();
+                    const cell = row.insertCell();
+                    cell.colSpan = 8;
+                    cell.textContent = '保有銘柄はありません';
+                    cell.style.textAlign = 'center';
                         return;
                     }
                     
-                    // 銘柄ごとに取引をグループ化
-                    const groupedTrades = {};
+                // 銘柄ごとにグループ化
+                const groupedTrades = {};
                     for (const trade of data.trades) {
-                        if (!groupedTrades[trade.symbol]) {
-                            groupedTrades[trade.symbol] = {
-                                symbol: trade.symbol,
-                                name: trade.name,
-                                totalQuantity: 0,
-                                totalInvestment: 0,
-                                trades: []
-                            };
-                        }
-                        groupedTrades[trade.symbol].totalQuantity += trade.quantity;
-                        groupedTrades[trade.symbol].totalInvestment += trade.buy_price * trade.quantity;
-                        groupedTrades[trade.symbol].trades.push(trade);
+                    if (!groupedTrades[trade.symbol]) {
+                        groupedTrades[trade.symbol] = {
+                            symbol: trade.symbol,
+                            name: trade.name,
+                            totalQuantity: 0,
+                            totalInvestment: 0,
+                            trades: []
+                        };
                     }
-                    
-                    let totalInvestment = 0;
-                    let totalProfitLoss = 0;
-                    
-                    // グループ化された取引を処理
-                    for (const symbol in groupedTrades) {
-                        const group = groupedTrades[symbol];
+                    groupedTrades[trade.symbol].totalQuantity += trade.quantity;
+                    groupedTrades[trade.symbol].totalInvestment += trade.buy_price * trade.quantity;
+                    groupedTrades[trade.symbol].trades.push(trade);
+                }
+                
+                let totalInvestment = 0;
+                let totalProfitLoss = 0;
+                
+                // グループ化された取引を処理
+                for (const symbol in groupedTrades) {
+                    const group = groupedTrades[symbol];
                         let latestPrice = '-';
                         let profitLoss = '-';
-                        let currentExpectation = '-';
-                        
+                    let currentExpectation = '-';
+                    
                         try {
-                            const res = await fetch(`/get_stock_price?symbol=${symbol}`);
-                            if (!res.ok) {
-                                const errorData = await res.json();
-                                throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
-                            }
-                            const priceData = await res.json();
-                            if (priceData && priceData.current_price) {
-                                latestPrice = priceData.current_price;
-                                const avgBuyPrice = group.totalInvestment / group.totalQuantity;
-                                profitLoss = ((latestPrice - avgBuyPrice) * group.totalQuantity).toFixed(2);
-                                
-                                totalInvestment += group.totalInvestment;
-                                totalProfitLoss += parseFloat(profitLoss);
+                        const res = await fetch(`/get_stock_price?symbol=${symbol}`);
+                        if (!res.ok) {
+                            const errorData = await res.json();
+                            throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+                        }
+                        const priceData = await res.json();
+                        if (priceData && priceData.current_price) {
+                            latestPrice = priceData.current_price;
+                            const avgBuyPrice = group.totalInvestment / group.totalQuantity;
+                            profitLoss = ((latestPrice - avgBuyPrice) * group.totalQuantity).toFixed(2);
+                            
+                            totalInvestment += group.totalInvestment;
+                            totalProfitLoss += parseFloat(profitLoss);
 
-                                // 現在期待値を取得
-                                const expectationRes = await fetch(`/get_stock_expectation?symbol=${symbol}`);
-                                if (expectationRes.ok) {
-                                    const expectationData = await expectationRes.json();
-                                    if (expectationData && expectationData.expected_value) {
-                                        currentExpectation = expectationData.expected_value.toFixed(2);
-                                    } else {
-                                        console.error(`期待値データの取得に失敗: ${symbol}`, expectationData);
-                                        currentExpectation = '-';
-                                    }
-                                } else {
-                                    const errorData = await expectationRes.json();
-                                    console.error(`期待値の取得に失敗: ${symbol}`, errorData);
-                                    currentExpectation = '-';
+                            // 現在期待値を取得
+                            const expectationRes = await fetch(`/get_stock_expectation?symbol=${symbol}`);
+                            if (expectationRes.ok) {
+                                const expectationData = await expectationRes.json();
+                                if (expectationData && expectationData.expected_value !== undefined) {
+                                    currentExpectation = expectationData.expected_value.toFixed(2);
                                 }
                             }
-                        } catch (e) {
-                            console.error(`株価取得エラー (${symbol}):`, e);
+                            }
+                    } catch (error) {
+                        console.error(`Error fetching data for ${symbol}:`, error);
                         }
-
-                        const row = document.createElement('tr');
+                    
+                    const row = tbody.insertRow();
                         row.innerHTML = `
-                            <td>${group.symbol}</td>
-                            <td>${group.name}</td>
-                            <td>${(group.totalInvestment / group.totalQuantity).toFixed(2)}</td>
-                            <td>${group.trades.map(t => t.buy_date).join('<br>')}</td>
-                            <td>${latestPrice !== '-' ? latestPrice.toFixed(2) : '-'}</td>
-                            <td>${group.totalQuantity}株</td>
-                            <td class="${profitLoss > 0 ? 'text-success' : 'text-danger'}">
-                                ${profitLoss !== '-' ? profitLoss : '-'}
-                            </td>
-                            <td class="${currentExpectation >= 50 ? 'text-success' : currentExpectation <= -10 ? 'text-danger' : ''}">
-                                ${currentExpectation}
-                            </td>
+                        <td>${symbol}</td>
+                        <td>${group.name}</td>
+                        <td>${(group.totalInvestment / group.totalQuantity).toFixed(2)}</td>
+                        <td>${group.trades[0].buy_date}</td>
+                        <td>${latestPrice}</td>
+                        <td>${group.totalQuantity}</td>
+                        <td class="${parseFloat(profitLoss) >= 0 ? 'text-success' : 'text-danger'}">${profitLoss}</td>
+                        <td>${currentExpectation}</td>
                             <td>
-                                ${group.trades.map(t => 
-                                    `<button class="btn btn-sm btn-warning mb-1" onclick="sellStock(${t.id})">売却</button>`
-                                ).join('<br>')}
+                            <button onclick="sellStock(${group.trades[0].id})" class="sell-btn">売却</button>
+                            <button onclick="showChart('${symbol}')" class="chart-btn">チャート</button>
                             </td>
                         `;
-                        tbody.appendChild(row);
-                    }
-                    
-                    // 合計金額と平均損益率を表示
-                    document.getElementById('totalInvestment').textContent = Math.round(totalInvestment).toLocaleString();
-                    document.getElementById('totalProfitLoss').textContent = Math.round(totalProfitLoss).toLocaleString();
-                    const averageProfitLossRate = totalInvestment > 0 ? (totalProfitLoss / totalInvestment * 100) : 0;
-                    document.getElementById('averageProfitLossRate').textContent = averageProfitLossRate.toFixed(2);
-                    
-                    // 損益の色を設定
-                    const totalProfitLossElement = document.getElementById('totalProfitLoss');
-                    const averageProfitLossRateElement = document.getElementById('averageProfitLossRate');
-                    if (totalProfitLoss > 0) {
-                        totalProfitLossElement.className = 'text-success';
-                        averageProfitLossRateElement.className = 'text-success';
-                    } else if (totalProfitLoss < 0) {
-                        totalProfitLossElement.className = 'text-danger';
-                        averageProfitLossRateElement.className = 'text-danger';
-                    }
-                })
-                .catch(error => {
+                }
+                
+                // 合計情報を上部に表示
+                document.getElementById('totalInvestment').textContent = Math.round(totalInvestment);
+                document.getElementById('totalProfitLoss').textContent = totalProfitLoss.toFixed(2);
+                const averageProfitLossRate = totalInvestment > 0 ? (totalProfitLoss / totalInvestment * 100).toFixed(2) : '0.00';
+                document.getElementById('averageProfitLossRate').textContent = averageProfitLossRate;
+                
+            } catch (error) {
                     console.error('Error:', error);
-                    alert('保有銘柄の取得中にエラーが発生しました');
-                });
+            }
         }
     </script>
 </body>

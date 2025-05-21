@@ -26,7 +26,6 @@ def calculate_rsi(data, period=14):
         
         return rsi
     except Exception as e:
-        print(f"RSI計算中にエラーが発生しました: {e}")
         return None
 
 def calculate_bollinger_bands(data, period=20, num_std=3):
@@ -51,7 +50,6 @@ def calculate_bollinger_bands(data, period=20, num_std=3):
         
         return upper_band, lower_band, deviation_upper, deviation_lower
     except Exception as e:
-        print(f"ボリンジャーバンド計算中にエラーが発生しました: {e}")
         return None, None, None, None
 
 def get_stock_data(symbol, period='2y'):
@@ -63,7 +61,6 @@ def get_stock_data(symbol, period='2y'):
         hist = stock.history(period=period)
         return hist
     except Exception as e:
-        print(f"Error fetching data for {symbol}: {e}")
         return None
 
 def calculate_expected_value(hist_data):
@@ -117,7 +114,6 @@ def calculate_expected_value(hist_data):
         return current_expected_value, max_expected_value, min_expected_value
         
     except Exception as e:
-        print(f"期待値計算中にエラーが発生しました: {e}")
         return None, None, None
 
 def get_stock_name(symbol):
@@ -135,17 +131,17 @@ def get_stock_name(symbol):
         print(f"銘柄名の取得に失敗: {symbol}, エラー: {e}")
         return symbol
 
-def calculate_backtest(hist_data, expected_values, buy_threshold=50, sell_threshold=-10):
+def calculate_backtest(hist_data, expected_values, buy_threshold=30, sell_threshold=0):
     """
     バックテストを実行し、勝率を計算
-    期待値が50以上で買い付け、-10以下で売却
+    期待値が30以上で買い続け、0以下で一括売却
     """
     if hist_data is None or len(hist_data) < 20 or len(expected_values) < 20:
         return None
         
     try:
         trades = []
-        position = None
+        positions = []  # 複数のポジションを管理
         
         # データを古い順にソート
         dates = hist_data.index[20:]  # 20日目以降のデータを使用
@@ -159,40 +155,47 @@ def calculate_backtest(hist_data, expected_values, buy_threshold=50, sell_thresh
             current_price = prices[i]
             current_expectation = expectations[i]
             
-            # 買いシグナル（期待値が50以上）
-            if position is None and current_expectation >= buy_threshold:
-                position = {
-                    'buy_date': dates[i],
-                    'buy_price': current_price,
-                    'buy_expectation': current_expectation
-                }
+            # NaNチェック
+            if pd.isna(current_price) or pd.isna(current_expectation):
+                continue
             
-            # 売りシグナル（期待値が-10以下）
-            elif position is not None and current_expectation <= sell_threshold:
-                profit_rate = ((current_price - position['buy_price']) / position['buy_price']) * 100
-                trades.append({
-                    'buy_date': position['buy_date'],
-                    'sell_date': dates[i],
-                    'buy_price': position['buy_price'],
-                    'sell_price': current_price,
-                    'profit_rate': profit_rate,
-                    'buy_expectation': position['buy_expectation'],
-                    'sell_expectation': current_expectation
+            # 買いシグナル（期待値が30以上）
+            if current_expectation >= buy_threshold:
+                positions.append({
+                    'buy_date': dates[i].strftime('%Y-%m-%d'),
+                    'buy_price': float(current_price),
+                    'buy_expectation': float(current_expectation)
                 })
-                position = None
+            
+            # 売りシグナル（期待値が0以下）
+            elif current_expectation <= sell_threshold and positions:
+                # 全ポジションを一括売却
+                for position in positions:
+                    profit_rate = ((current_price - position['buy_price']) / position['buy_price']) * 100
+                    trades.append({
+                        'buy_date': position['buy_date'],
+                        'sell_date': dates[i].strftime('%Y-%m-%d'),
+                        'buy_price': float(position['buy_price']),
+                        'sell_price': float(current_price),
+                        'profit_rate': float(profit_rate),
+                        'buy_expectation': float(position['buy_expectation']),
+                        'sell_expectation': float(current_expectation)
+                    })
+                positions = []  # ポジションをクリア
         
         # 最終ポジションの処理
-        if position is not None:
-            profit_rate = ((prices[-1] - position['buy_price']) / position['buy_price']) * 100
-            trades.append({
-                'buy_date': position['buy_date'],
-                'sell_date': dates[-1],
-                'buy_price': position['buy_price'],
-                'sell_price': prices[-1],
-                'profit_rate': profit_rate,
-                'buy_expectation': position['buy_expectation'],
-                'sell_expectation': expectations[-1]
-            })
+        if positions:
+            for position in positions:
+                profit_rate = ((prices[-1] - position['buy_price']) / position['buy_price']) * 100
+                trades.append({
+                    'buy_date': position['buy_date'],
+                    'sell_date': dates[-1].strftime('%Y-%m-%d'),
+                    'buy_price': float(position['buy_price']),
+                    'sell_price': float(prices[-1]),
+                    'profit_rate': float(profit_rate),
+                    'buy_expectation': float(position['buy_expectation']),
+                    'sell_expectation': float(expectations[-1])
+                })
         
         # 勝率の計算
         if trades:
@@ -204,12 +207,12 @@ def calculate_backtest(hist_data, expected_values, buy_threshold=50, sell_thresh
             max_loss = min(t['profit_rate'] for t in trades)
             
             return {
-                'win_rate': round(win_rate, 2),
+                'win_rate': float(round(win_rate, 2)),
                 'total_trades': total_trades,
                 'winning_trades': winning_trades,
-                'avg_profit': round(avg_profit, 2),
-                'max_profit': round(max_profit, 2),
-                'max_loss': round(max_loss, 2),
+                'avg_profit': float(round(avg_profit, 2)),
+                'max_profit': float(round(max_profit, 2)),
+                'max_loss': float(round(max_loss, 2)),
                 'trades': trades
             }
         
@@ -289,7 +292,6 @@ def analyze_single_stock(symbol):
                 'backtest': backtest_result
             }
     except Exception as e:
-        print(f"分析中にエラーが発生しました: {e}")
         return None
     
     return None
@@ -331,6 +333,7 @@ if __name__ == "__main__":
     end_time = datetime.now()
     
     print(f"\n分析完了: {len(results)}件の銘柄が見つかりました")
+    print(f"分析対象銘柄数: {len(symbols)}件")
     print(f"処理時間: {(end_time - start_time).total_seconds():.1f}秒")
     
     print("\n期待値が+30以上の銘柄:")
