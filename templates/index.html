@@ -915,7 +915,7 @@
         }
 
         function removeFromPortfolio(ticker) {
-            const token = localStorage.getItem('authToken');
+            const token = localStorage.getItem('token');
             if (!token) {
                 alert('ログインが必要です');
                 return;
@@ -1472,13 +1472,18 @@
                                     type: 'time', 
                                     time: { 
                                         unit: 'day', 
-                                        displayFormats: { day: 'yyyy-MM-dd' } 
+                                        displayFormats: { day: 'yyyy-MM-dd' },
+                                        distribution: 'series'  // データのない日をスキップ
                                     }, 
                                     ticks: { 
                                         maxRotation: 45, 
                                         minRotation: 45,
                                         autoSkip: true,
-                                        maxTicksLimit: 20
+                                        maxTicksLimit: 20,
+                                        source: 'auto'  // 自動的にデータポイントを選択
+                                    },
+                                    grid: {
+                                        display: true
                                     }
                                 },
                                 y: { 

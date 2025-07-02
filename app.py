@@ -12,6 +12,11 @@ import jwt
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf.csrf import CSRFProtect
 from functools import wraps
+import concurrent.futures
+from functools import partial
+import multiprocessing
+from tqdm import tqdm
+import pytz  # タイムゾーン用に追加
 
 # CSRF保護の初期化
 csrf = CSRFProtect()
@@ -111,10 +116,7 @@ def calculate_rsi(data, period=14):
         
         # RSIを計算
         rsi = 100 - (100 / (1 + rs))
-        
-        print(f"RSI計算結果のサンプル: {rsi.head()}")
-        print(f"RSIの統計情報: 平均={rsi.mean():.2f}, 最小={rsi.min():.2f}, 最大={rsi.max():.2f}")
-        
+       
         return rsi
     except Exception as e:
         print(f"RSI計算中にエラーが発生しました: {str(e)}")
@@ -141,22 +143,283 @@ def calculate_bollinger_bands(data, period=20, num_std=3):
         # 乖離率を計算
         deviation_upper = ((data['Close'] - upper_band) / upper_band) * 100
         deviation_lower = ((data['Close'] - lower_band) / lower_band) * 100
-        
-        print(f"ボリンジャーバンド計算結果のサンプル:")
-        print(f"上バンド: {upper_band.head()}")
-        print(f"下バンド: {lower_band.head()}")
-        print(f"乖離率(上): {deviation_upper.head()}")
-        print(f"乖離率(下): {deviation_lower.head()}")
-        
+      
         return upper_band, lower_band, deviation_upper, deviation_lower
     except Exception as e:
         print(f"ボリンジャーバンド計算中にエラーが発生しました: {str(e)}")
-        print(traceback.format_exc())
+        
         return None, None, None, None
+
+def get_stock_data_for_analysis(symbol, period='2y'):
+    """
+    指定された銘柄の株価データを取得（2年分）
+    """
+    try:
+        stock = yf.Ticker(symbol)
+        hist = stock.history(period=period)
+        return hist
+    except Exception as e:
+        return None
+
+def get_stock_name_for_analysis(symbol):
+    """
+    銘柄名を取得する
+    """
+    try:
+        stock = yf.Ticker(symbol)
+        stock_info = stock.info
+        stock_name = stock_info.get('longName', '') or stock_info.get('shortName', '') or symbol
+        if '.T' in symbol:  # 日本株の場合
+            stock_name = f"{stock_name} ({symbol.replace('.T', '')})"
+        return stock_name
+    except Exception as e:
+        print(f"銘柄名の取得に失敗: {symbol}, エラー: {e}")
+        return symbol
+
+def calculate_backtest_for_analysis(hist_data, expected_values, buy_threshold=30, sell_threshold=0):
+    """
+    バックテストを実行し、勝率を計算
+    期待値が30以上で買い続け、0以下で一括売却
+    """
+    if hist_data is None or len(hist_data) < 20 or len(expected_values) < 20:
+        return None
+        
+    try:
+        trades = []
+        positions = []  # 複数のポジションを管理
+        
+        # データを古い順にソート
+        dates = hist_data.index[20:]  # 20日目以降のデータを使用
+        prices = hist_data['Close'].values[20:]
+        expectations = expected_values[20:]  # 20日目以降の期待値を使用
+        
+        for i in range(len(dates)):
+            if i >= len(expectations):  # インデックスチェック
+                break
+                
+            current_price = prices[i]
+            current_expectation = expectations[i]
+            
+            # NaNチェック
+            if pd.isna(current_price) or pd.isna(current_expectation):
+                continue
+            
+            # 買いシグナル（期待値が30以上）
+            if current_expectation >= buy_threshold:
+                positions.append({
+                    'buy_date': dates[i].strftime('%Y-%m-%d'),
+                    'buy_price': float(current_price),
+                    'buy_expectation': float(current_expectation)
+                })
+            
+            # 売りシグナル（期待値が0以下）
+            elif current_expectation <= sell_threshold and positions:
+                # 全ポジションを一括売却
+                for position in positions:
+                    profit_rate = ((current_price - position['buy_price']) / position['buy_price']) * 100
+                    trades.append({
+                        'buy_date': position['buy_date'],
+                        'sell_date': dates[i].strftime('%Y-%m-%d'),
+                        'buy_price': float(position['buy_price']),
+                        'sell_price': float(current_price),
+                        'profit_rate': float(profit_rate),
+                        'buy_expectation': float(position['buy_expectation']),
+                        'sell_expectation': float(current_expectation)
+                    })
+                positions = []  # ポジションをクリア
+        
+        # 最終ポジションの処理
+        if positions:
+            for position in positions:
+                profit_rate = ((prices[-1] - position['buy_price']) / position['buy_price']) * 100
+                trades.append({
+                    'buy_date': position['buy_date'],
+                    'sell_date': dates[-1].strftime('%Y-%m-%d'),
+                    'buy_price': float(position['buy_price']),
+                    'sell_price': float(prices[-1]),
+                    'profit_rate': float(profit_rate),
+                    'buy_expectation': float(position['buy_expectation']),
+                    'sell_expectation': float(expectations[-1])
+                })
+        
+        # 勝率の計算
+        if trades:
+            winning_trades = len([t for t in trades if t['profit_rate'] > 0])
+            total_trades = len(trades)
+            win_rate = (winning_trades / total_trades) * 100
+            avg_profit = sum(t['profit_rate'] for t in trades) / total_trades
+            max_profit = max(t['profit_rate'] for t in trades)
+            max_loss = min(t['profit_rate'] for t in trades)
+            
+            return {
+                'win_rate': float(round(win_rate, 2)),
+                'total_trades': total_trades,
+                'winning_trades': winning_trades,
+                'avg_profit': float(round(avg_profit, 2)),
+                'max_profit': float(round(max_profit, 2)),
+                'max_loss': float(round(max_loss, 2)),
+                'trades': trades
+            }
+        
+        return None
+        
+    except Exception as e:
+        print(f"バックテスト中にエラーが発生しました: {e}")
+        return None
+
+def analyze_single_stock(symbol):
+    """
+    1銘柄の分析を実行
+    """
+    # 日本株の場合は.Tを付加
+    if not symbol.endswith('.T'):
+        symbol = f"{symbol}.T"
+        
+    hist_data = get_stock_data_for_analysis(symbol)
+    if hist_data is None or len(hist_data) < 20:
+        return None
+        
+    try:
+        # RSIを計算
+        rsi = calculate_rsi(hist_data)
+        if rsi is None:
+            return None
+        
+        # ボリンジャーバンドを計算
+        upper_band, lower_band, deviation_upper, deviation_lower = calculate_bollinger_bands(hist_data)
+        if lower_band is None:
+            return None
+        
+        # 全期間の期待値を計算
+        expected_values = []
+        for i in range(len(hist_data)):
+            if i < 20:  # 20日分のデータが必要
+                continue
+                
+            current_rsi = rsi.iloc[i]
+            current_lower_deviation = deviation_lower.iloc[i]
+            
+            # RSIコンポーネント
+            rsi_component = 50 - current_rsi
+            
+            # 下方乖離率コンポーネント
+            deviation_component = abs(min(0, current_lower_deviation))
+            
+            # 期待値の計算
+            raw_expectation = rsi_component + deviation_component
+            
+            # 期待値の最終調整
+            expected_value = round(raw_expectation * 2, 2) if raw_expectation >= 0 else round(raw_expectation, 2)
+            expected_values.append(expected_value)
+        
+        if not expected_values:
+            return None
+            
+        # 最新の期待値、最大値、最小値を取得
+        current_expected_value = expected_values[-1]
+        max_expected_value = max(expected_values)
+        min_expected_value = min(expected_values)
+        
+        if current_expected_value >= 30:
+            stock_name = get_stock_name_for_analysis(symbol)
+            
+            # バックテストの実行
+            backtest_result = calculate_backtest_for_analysis(hist_data, expected_values)
+            
+            return {
+                'symbol': symbol,
+                'name': stock_name,
+                'expected_value': current_expected_value,
+                'max_expected_value': max_expected_value,
+                'min_expected_value': min_expected_value,
+                'current_price': hist_data['Close'].iloc[-1],
+                'ma20': hist_data['Close'].rolling(window=20).mean().iloc[-1],
+                'backtest': backtest_result
+            }
+    except Exception as e:
+        return None
+    
+    return None
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/analyze_stocks')
+def analyze_stocks():
+    try:
+        market = request.args.get('market', 'prime')  # デフォルトはプライム市場
+        print(f"選択された市場: {market}")  # デバッグ用
+        
+        # 市場に応じて銘柄リストファイルを選択
+        if market == 'growth':
+            stock_list_file = 'Stock2/growth_list.csv'
+        else:
+            stock_list_file = 'Stock2/prime_list.csv'
+        
+        print(f"使用する銘柄リスト: {stock_list_file}")  # デバッグ用
+        
+        # 銘柄リストの読み込み
+        try:
+            df = pd.read_csv(stock_list_file)
+            symbols = df['コード'].astype(str).tolist()
+            print(f"読み込んだ銘柄数: {len(symbols)}")  # デバッグ用
+        except Exception as e:
+            print(f"銘柄リストの読み込みエラー: {str(e)}")  # デバッグ用
+            return jsonify({'error': f'銘柄リストの読み込みに失敗しました: {str(e)}'})
+        
+        # 分析の実行（並列処理）
+        results = []
+        total_stocks = len(symbols)
+        analyzed_stocks = 0
+        
+        # CPUコア数を取得（-1で全コア使用）
+        max_workers = multiprocessing.cpu_count() * 8  # コア数の8倍のワーカーを使用
+        
+        print(f"\n{market}市場の分析を開始します...")
+        
+        # バッチサイズを設定（一度に処理する銘柄数）
+        batch_size = 200  # バッチサイズを増加
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 進捗バーの初期化
+            pbar = tqdm(total=total_stocks, desc="分析進捗", unit="銘柄", ncols=80)
+            
+            # バッチ処理
+            for i in range(0, total_stocks, batch_size):
+                batch_symbols = symbols[i:i + batch_size]
+                
+                # 各銘柄の分析を並列実行
+                future_to_symbol = {
+                    executor.submit(analyze_single_stock, symbol): symbol 
+                    for symbol in batch_symbols
+                }
+                
+                # 完了した分析結果を収集
+                for future in concurrent.futures.as_completed(future_to_symbol):
+                    symbol = future_to_symbol[future]
+                    try:
+                        result = future.result()
+                        if result and result['expected_value'] >= 30:
+                            results.append(result)
+                            analyzed_stocks += 1
+                    except Exception:
+                        pass
+                    finally:
+                        pbar.update(1)
+            
+            pbar.close()
+        
+        print(f"\n分析完了: {analyzed_stocks}件の銘柄が見つかりました")
+        
+        return jsonify({
+            'results': results,
+            'total_stocks': total_stocks,
+            'analyzed_stocks': analyzed_stocks
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 def normalize_ticker(ticker):
     """銘柄コードを正規化する"""
@@ -216,10 +479,10 @@ def get_stock_list():
         for item in stock_data:
             formatted_data.append({
                 'date': item['date'],
-                'open': item['open'],
-                'high': item['high'],
-                'low': item['low'],
-                'close': item['close'],
+                'open': round(item['open'], 1),
+                'high': round(item['high'], 1),
+                'low': round(item['low'], 1),
+                'close': round(item['close'], 1),
                 'volume': item['volume'],
                 'rsi': item['rsi'],
                 'lower_deviation': item['lower_deviation'],
@@ -348,6 +611,9 @@ def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_s
             total_profit_amount = sum(t['profit_amount'] for t in trades)
             average_profit_rate = sum(t['profit_rate'] for t in trades) / total_trades
             
+            # 最大利益率を計算
+            max_profit_rate = max([t['profit_rate'] for t in trades]) if trades else 0
+
             # 売却日ごとの利益率を平均化
             sell_date_profits = {}
             for trade in trades:
@@ -372,6 +638,7 @@ def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_s
             total_profit_amount = 0
             total_profit_rate = 0
             average_profit_rate = 0
+            max_profit_rate = 0
         
         return {
             'trades': trades,
@@ -382,7 +649,8 @@ def calculate_backtest(stock_data, buy_threshold=30, sell_threshold=0, disable_s
                 'win_rate': (winning_trades / total_trades * 100) if total_trades > 0 else 0,
                 'total_profit_rate': total_profit_rate,
                 'total_profit_amount': total_profit_amount,
-                'average_profit_rate': average_profit_rate
+                'average_profit_rate': average_profit_rate,
+                'max_profit_rate': max_profit_rate
             }
         }
     except Exception as e:
@@ -750,6 +1018,35 @@ def remove_from_portfolio():
             'message': f'エラーが発生しました: {str(e)}'
         }), 500
 
+def fetch_stock_data(portfolio):
+    """個別の銘柄データを取得する関数"""
+    try:
+        if not portfolio.ticker:
+            print(f"警告: ポートフォリオID {portfolio.id} の銘柄コードが空です")
+            return None
+
+        stock_info = get_latest_stock_info(portfolio.ticker)
+        if stock_info and 'error' not in stock_info:
+            return stock_info
+        else:
+            error_msg = stock_info.get('error', '株価データの取得に失敗しました') if stock_info else '株価データの取得に失敗しました'
+            return {
+                'ticker': portfolio.ticker,
+                'name': f"{portfolio.ticker} (取得失敗)",
+                'latest_price': None,
+                'short_term_expectation': None,
+                'error': error_msg
+            }
+    except Exception as e:
+        print(f"銘柄 {portfolio.ticker} のデータ取得中にエラー: {str(e)}")
+        return {
+            'ticker': portfolio.ticker,
+            'name': f"{portfolio.ticker} (エラー)",
+            'latest_price': None,
+            'short_term_expectation': None,
+            'error': str(e)
+        }
+
 @app.route('/get_portfolio_data', methods=['POST'])
 def get_portfolio_data():
     try:
@@ -783,35 +1080,17 @@ def get_portfolio_data():
             # ユーザーのポートフォリオを取得
             portfolios = Portfolio.query.filter_by(user_id=user.id).all()
             
-            # 株価データを取得
+            # 並列処理で株価データを取得
             portfolio_data = []
-            for portfolio in portfolios:
-                try:
-                    if not portfolio.ticker:
-                        print(f"警告: ポートフォリオID {portfolio.id} の銘柄コードが空です")
-                        continue
-
-                    stock_info = get_latest_stock_info(portfolio.ticker)
-                    if stock_info and 'error' not in stock_info:
-                        portfolio_data.append(stock_info)
-                    else:
-                        error_msg = stock_info.get('error', '株価データの取得に失敗しました') if stock_info else '株価データの取得に失敗しました'
-                        portfolio_data.append({
-                            'ticker': portfolio.ticker,
-                            'name': f"{portfolio.ticker} (取得失敗)",
-                            'latest_price': None,
-                            'short_term_expectation': None,
-                            'error': error_msg
-                        })
-                except Exception as e:
-                    print(f"銘柄 {portfolio.ticker} のデータ取得中にエラー: {str(e)}")
-                    portfolio_data.append({
-                        'ticker': portfolio.ticker,
-                        'name': f"{portfolio.ticker} (エラー)",
-                        'latest_price': None,
-                        'short_term_expectation': None,
-                        'error': str(e)
-                    })
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                # 各ポートフォリオのデータを並列で取得
+                future_to_portfolio = {executor.submit(fetch_stock_data, portfolio): portfolio for portfolio in portfolios}
+                
+                # 結果を収集
+                for future in concurrent.futures.as_completed(future_to_portfolio):
+                    result = future.result()
+                    if result:
+                        portfolio_data.append(result)
 
             return jsonify({
                 'success': True,

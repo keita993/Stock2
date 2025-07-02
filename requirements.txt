@@ -1,8 +1,11 @@
-flask
-yfinance==0.2.59
-pandas
-pandas_ta
-python-dotenv
-PyJWT
-flask_sqlalchemy
-flask_wtf
+flask==3.0.2
+flask-sqlalchemy==3.1.1
+flask-wtf==1.2.1
+python-dotenv==1.0.1
+yfinance==0.2.63
+pandas==2.2.1
+numpy==1.26.4
+pyjwt==2.8.0
+werkzeug==3.0.1
+winshell==0.6
+pywin32==306; platform_system=="Windows"
