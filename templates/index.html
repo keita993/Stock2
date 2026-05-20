@@ -194,11 +194,8 @@
             color: var(--text-color);
             margin: 10px 0;
         }
-        .auth-container {
-            display: none;
-        }
         .main-content {
-            display: none;
+            display: block;
         }
         .header-section {
             padding: 1rem;
@@ -330,62 +327,6 @@
     </style>
 </head>
 <body>
-    <!-- 認証フォーム -->
-    <div id="authContainer" class="auth-container">
-        <div class="container mt-5">
-            <div class="auth-form">
-                <h2 class="text-center mb-4">ログイン</h2>
-                <form id="loginForm">
-                    <div class="mb-3">
-                        <label for="username" class="form-label">ユーザー名</label>
-                        <input type="text" class="form-control" id="username" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="password" class="form-label">パスワード</label>
-                        <input type="password" class="form-control" id="password" required>
-                    </div>
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">ログイン</button>
-                    </div>
-                </form>
-                <div class="text-center mt-3">
-                    <a href="#" id="showRegisterForm">新規登録</a>
-                </div>
-            </div>
-
-            <div id="registerForm" class="auth-form" style="display: none;">
-                <h2 class="text-center mb-4">新規登録</h2>
-                <form id="registerFormElement">
-                    <div class="mb-3">
-                        <label for="newUsername" class="form-label">ユーザー名</label>
-                        <input type="text" class="form-control" id="newUsername" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="newPassword" class="form-label">パスワード</label>
-                        <input type="password" class="form-control" id="newPassword" required>
-                        <div class="form-text text-muted">
-                            <ul class="mb-0">
-                                <li>他のサイトで使用しているパスワードは使用しないでください</li>
-                                <li>8文字以上の英数字を含むパスワードを設定してください</li>
-                                <li>個人情報を含まないパスワードを設定してください</li>
-                            </ul>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="confirmPassword" class="form-label">パスワード（確認）</label>
-                        <input type="password" class="form-control" id="confirmPassword" required>
-                    </div>
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">登録</button>
-                    </div>
-                </form>
-                <div class="text-center mt-3">
-                    <a href="#" id="showLoginForm">ログイン画面に戻る</a>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- メインコンテンツ -->
     <div id="mainContent" class="main-content">
         <div class="container mt-4">
@@ -397,46 +338,7 @@
                         <button id="themeToggle" class="btn btn-outline-secondary" onclick="toggleTheme()">
                             <i class="bi bi-moon-fill"></i> <span class="d-none d-md-inline">ダークモード</span>
                         </button>
-                        <button id="changePasswordBtn" class="btn btn-outline-primary" onclick="showChangePasswordForm()">
-                            <i class="bi bi-key-fill"></i> <span class="d-none d-md-inline">パスワード変更</span>
-                        </button>
-                        <span id="userDisplay" class="d-none d-md-inline"></span>
-                        <button class="btn btn-outline-danger" onclick="logout()">ログアウト</button>
                     </div>
-                </div>
-                <!-- モバイル表示用のユーザー名 -->
-                <div id="mobileUserDisplay" class="d-md-none mt-2 text-muted"></div>
-            </div>
-            
-            <!-- パスワード変更フォーム -->
-            <div id="changePasswordForm" class="card mb-4" style="display: none;">
-                <div class="card-body">
-                    <h5 class="card-title">パスワード変更</h5>
-                    <form id="changePasswordFormElement">
-                        <div class="mb-3">
-                            <label for="currentPassword" class="form-label">現在のパスワード</label>
-                            <input type="password" class="form-control" id="currentPassword" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="newPassword" class="form-label">新しいパスワード</label>
-                            <input type="password" class="form-control" id="newPasswordChange" required>
-                            <div class="form-text text-muted">
-                                <ul class="mb-0">
-                                    <li>他のサイトで使用しているパスワードは使用しないでください</li>
-                                    <li>8文字以上の英数字を含むパスワードを設定してください</li>
-                                    <li>個人情報を含まないパスワードを設定してください</li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="confirmNewPassword" class="form-label">新しいパスワード（確認）</label>
-                            <input type="password" class="form-control" id="confirmNewPassword" required>
-                        </div>
-                        <div class="d-flex justify-content-end gap-2">
-                            <button type="button" class="btn btn-secondary" onclick="hideChangePasswordForm()">キャンセル</button>
-                            <button type="submit" class="btn btn-primary">パスワードを変更</button>
-                        </div>
-                    </form>
                 </div>
             </div>
 
@@ -657,142 +559,14 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
     <script>
-        // 認証状態の管理
-        let isAuthenticated = false;
-        let currentUser = '';
-
         // 初期表示の制御
         function initializeDisplay() {
-            const authContainer = document.getElementById('authContainer');
             const mainContent = document.getElementById('mainContent');
-            const userDisplay = document.getElementById('userDisplay');
-            const mobileUserDisplay = document.getElementById('mobileUserDisplay');
             const portfolioSection = document.getElementById('portfolioSection');
 
-            // 認証状態を確認
-            const token = localStorage.getItem('authToken');
-            if (token) {
-                isAuthenticated = true;
-                currentUser = localStorage.getItem('username');
-                authContainer.style.display = 'none';
-                mainContent.style.display = 'block';
-                userDisplay.textContent = `ようこそ、${currentUser}さん`;
-                mobileUserDisplay.textContent = `ようこそ、${currentUser}さん`;
-                portfolioSection.classList.remove('d-none');
-                updatePortfolio(); // ポートフォリオを読み込む
-            } else {
-                authContainer.style.display = 'block';
-                mainContent.style.display = 'none';
-                portfolioSection.classList.add('d-none');
-            }
-        }
-
-        // ログインフォームの処理
-        document.getElementById('loginForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
-
-            console.log('ログイン試行:', { username, password });  // デバッグログ
-
-            try {
-                const response = await fetch('/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ username, password })
-                });
-
-                console.log('ログイン応答ステータス:', response.status);  // デバッグログ
-                const data = await response.json();
-                console.log('ログイン応答データ:', data);  // デバッグログ
-
-                if (response.ok) {
-                    localStorage.setItem('authToken', data.token);
-                    localStorage.setItem('username', username);
-                    isAuthenticated = true;
-                    currentUser = username;
-                    initializeDisplay();
-                } else {
-                    alert(data.message || 'ログインに失敗しました');
-                }
-            } catch (error) {
-                console.error('ログインエラー:', error);  // デバッグログ
-                alert('ログイン中にエラーが発生しました');
-            }
-        });
-
-        // 新規登録フォームの処理
-        document.getElementById('registerFormElement').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const username = document.getElementById('newUsername').value;
-            const password = document.getElementById('newPassword').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
-
-            if (password !== confirmPassword) {
-                alert('パスワードが一致しません');
-                return;
-            }
-
-            try {
-                const response = await fetch('/register', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ username, password })
-                });
-
-                const data = await response.json();
-                if (data.success) {
-                    alert('登録が完了しました。ログインしてください。');
-                    document.getElementById('showLoginForm').click();
-                } else {
-                    alert('登録に失敗しました: ' + data.message);
-                }
-            } catch (error) {
-                alert('登録中にエラーが発生しました');
-                console.error('Registration error:', error);
-            }
-        });
-
-        // フォーム切り替え
-        document.getElementById('showRegisterForm').addEventListener('click', function(e) {
-            e.preventDefault();
-            document.getElementById('loginForm').parentElement.style.display = 'none';
-            document.getElementById('registerForm').style.display = 'block';
-        });
-
-        document.getElementById('showLoginForm').addEventListener('click', function(e) {
-            e.preventDefault();
-            document.getElementById('registerForm').style.display = 'none';
-            document.getElementById('loginForm').parentElement.style.display = 'block';
-        });
-
-        // ログアウト処理
-        function logout() {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('username');
-            // 検索窓の値をクリア
-            document.getElementById('ticker').value = '';
-            // 銘柄情報をクリア
-            document.getElementById('stockNameDisplay').textContent = '';
-            document.getElementById('stockDataBody').innerHTML = '';
-            document.getElementById('expectationStats').classList.add('d-none');
-            document.getElementById('backtestResults').classList.add('d-none');
-            // チャートをクリア
-            if (window.stockChart && typeof window.stockChart.destroy === 'function') {
-                window.stockChart.destroy();
-                window.stockChart = null;
-            }
-            isAuthenticated = false;
-            currentUser = '';
-            
-            // ログイン画面を表示
-            document.getElementById('authContainer').style.display = 'block';
-            document.getElementById('mainContent').style.display = 'none';
-            document.getElementById('portfolioSection').classList.add('d-none');
+            mainContent.style.display = 'block';
+            portfolioSection.classList.remove('d-none');
+            updatePortfolio();
         }
 
         // 検索履歴の管理
@@ -802,8 +576,7 @@
         let savedPeriodReturn = null;
 
         function getHistoryKey() {
-            const username = localStorage.getItem('username');
-            return username ? `tickerSearchHistory_${username}` : 'tickerSearchHistory';
+            return 'tickerSearchHistory';
         }
 
         function loadSearchHistory() {
@@ -849,14 +622,6 @@
         }
 
         function addToPortfolio(ticker, originalTicker) {
-            const token = localStorage.getItem('authToken');
-            if (!token) {
-                alert('ログインが必要です');
-                return;
-            }
-
-            // 必要なデータを取得
-            const stockName = document.getElementById('stockNameDisplay').textContent;
             const stockData = window.currentStockData;
             
             // データの検証
@@ -871,171 +636,125 @@
                 return;
             }
 
-            // デバッグ用ログ
-            console.log('送信するデータ:', {
-                ticker: ticker,
-                original_ticker: originalTicker,
-                token: token
-            });
+            const portfolio = getPortfolio();
+            const normalizedTicker = ticker.trim().toUpperCase();
 
-            const requestData = {
-                ticker: ticker,
-                original_ticker: originalTicker,
-                token: token
-            };
-
-            fetch('/add_to_portfolio', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestData)
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(data => {
-                        console.error('サーバーからのエラーレスポンス:', data);
-                        throw new Error(data.message || 'エラーが発生しました');
-                    });
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log('ポートフォリオデータのレスポンス:', data);
-                if (data.success) {
-                    updatePortfolio();
-                } else {
-                    alert(data.message || 'エラーが発生しました');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert(error.message);
-            });
-        }
-
-        function removeFromPortfolio(ticker) {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                alert('ログインが必要です');
+            if (portfolio.some(stock => stock.ticker === normalizedTicker)) {
+                alert('この銘柄は既にポートフォリオに存在します');
                 return;
             }
 
-            fetch('/remove_from_portfolio', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    ticker: ticker,
-                    token: token
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('ポートフォリオから削除しました');
-                    updatePortfolio();
-                } else {
-                    alert(data.message || 'エラーが発生しました');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('エラーが発生しました');
+            portfolio.push({
+                ticker: normalizedTicker,
+                original_ticker: originalTicker || ticker,
+                name: document.getElementById('stockNameDisplay').textContent || normalizedTicker,
+                latest_price: latestData.close,
+                short_term_expectation: latestData.short_term_expectation
             });
+            savePortfolio(portfolio);
+            updatePortfolio();
         }
 
-        function updatePortfolio() {
-            const token = localStorage.getItem('authToken');
+        function removeFromPortfolio(ticker) {
+            const portfolio = getPortfolio().filter(stock => stock.ticker !== ticker);
+            savePortfolio(portfolio);
+            updatePortfolio();
+        }
+
+        async function updatePortfolio() {
             const portfolioSection = document.getElementById('portfolioSection');
             const portfolioTable = document.getElementById('portfolioTable');
             const portfolioLoading = document.getElementById('portfolioLoading');
             const portfolioError = document.getElementById('portfolioError');
+            const portfolio = getPortfolio();
 
-            if (!token) {
-                portfolioSection.classList.add('d-none');
+            portfolioSection.classList.remove('d-none');
+            portfolioError.classList.add('d-none');
+
+            if (portfolio.length === 0) {
+                portfolioLoading.style.display = 'none';
+                portfolioTable.innerHTML = '<tr><td colspan="5">ポートフォリオが空です</td></tr>';
                 return;
             }
 
-            console.log('認証トークン:', token); // デバッグ用ログ追加
-
-            portfolioSection.classList.remove('d-none');
             portfolioLoading.style.display = 'block';
-            portfolioError.classList.add('d-none');
 
-            const requestData = {
-                token: token
-            };
-            console.log('リクエストデータ:', requestData); // デバッグ用ログ追加
+            try {
+                const portfolioData = await Promise.all(portfolio.map(async savedStock => {
+                    try {
+                        const response = await fetch('/get_stock_list', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                ticker: savedStock.ticker,
+                                period: 60
+                            })
+                        });
+                        const data = await response.json();
+                        if (!response.ok || data.error || !data.stock_data || data.stock_data.length === 0) {
+                            throw new Error(data.error || '株価データの取得に失敗しました');
+                        }
+                        const latest = data.stock_data[0];
+                        return {
+                            ...savedStock,
+                            name: data.stock_name || savedStock.name || savedStock.ticker,
+                            latest_price: latest.close,
+                            short_term_expectation: latest.short_term_expectation
+                        };
+                    } catch (error) {
+                        return {
+                            ...savedStock,
+                            error: error.message
+                        };
+                    }
+                }));
 
-            fetch('/get_portfolio_data', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestData)
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(data => {
-                        throw new Error(data.message || 'エラーが発生しました');
-                    });
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log('ポートフォリオデータのレスポンス:', data); // デバッグ用ログ追加
+                savePortfolio(portfolioData.map(stock => ({
+                    ticker: stock.ticker,
+                    original_ticker: stock.original_ticker,
+                    name: stock.name,
+                    latest_price: stock.latest_price,
+                    short_term_expectation: stock.short_term_expectation
+                })));
+
                 portfolioLoading.style.display = 'none';
-                if (data.success) {
-                    if (data.portfolio_data.length === 0) {
-                        portfolioTable.innerHTML = '<tr><td colspan="5">ポートフォリオが空です</td></tr>';
-                        return;
+                let html = '';
+                portfolioData.forEach(stock => {
+                    const name = stock.error ? `${stock.name || stock.ticker} (取得失敗)` : (stock.name || stock.ticker);
+                    const latestPrice = stock.latest_price !== null && stock.latest_price !== undefined ? formatNumber(stock.latest_price) + '円' : '-';
+                    const expectation = stock.short_term_expectation !== null && stock.short_term_expectation !== undefined ? formatNumber(stock.short_term_expectation) : '-';
+                    
+                    let expectationClass = '';
+                    if (stock.short_term_expectation !== null && stock.short_term_expectation !== undefined && !isNaN(stock.short_term_expectation)) {
+                        if (stock.short_term_expectation >= 30) {
+                            expectationClass = 'expectation-high';
+                        } else if (stock.short_term_expectation <= 0) {
+                            expectationClass = 'expectation-low';
+                        }
                     }
 
-                    console.log('個別のポートフォリオデータ:', data.portfolio_data); // デバッグ用ログ追加
-                    let html = '';
-                    data.portfolio_data.forEach(stock => {
-                        // データの存在チェック
-                        const name = stock.name || stock.ticker;
-                        const latestPrice = stock.latest_price !== null ? formatNumber(stock.latest_price) + '円' : '-';
-                        const expectation = stock.short_term_expectation !== null ? formatNumber(stock.short_term_expectation) : '-';
-                        
-                        // 期待値に応じたクラスを設定
-                        let expectationClass = '';
-                        if (stock.short_term_expectation !== null && !isNaN(stock.short_term_expectation)) {
-                            if (stock.short_term_expectation >= 30) {
-                                expectationClass = 'expectation-high';
-                            } else if (stock.short_term_expectation <= 0) {
-                                expectationClass = 'expectation-low';
-                            }
-                        }
-
-                        html += `
-                            <tr>
-                                <td>${stock.ticker}</td>
-                                <td>${name}</td>
-                                <td>${latestPrice}</td>
-                                <td class="${expectationClass}">${expectation}</td>
-                                <td>
-                                    <button class="btn btn-sm btn-outline-primary me-2" onclick="showStockData('${stock.ticker}')">表示</button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="removeFromPortfolio('${stock.ticker}')">削除</button>
-                                </td>
-                            </tr>
-                        `;
-                    });
-                    portfolioTable.innerHTML = html;
-                } else {
-                    portfolioError.textContent = data.message || 'エラーが発生しました';
-                    portfolioError.classList.remove('d-none');
-                }
-            })
-            .catch(error => {
+                    html += `
+                        <tr>
+                            <td>${stock.ticker}</td>
+                            <td>${name}</td>
+                            <td>${latestPrice}</td>
+                            <td class="${expectationClass}">${expectation}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary me-2" onclick="showStockData('${stock.ticker}')">表示</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="removeFromPortfolio('${stock.ticker}')">削除</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+                portfolioTable.innerHTML = html;
+            } catch (error) {
                 console.error('Error:', error);
                 portfolioLoading.style.display = 'none';
                 portfolioError.textContent = error.message || 'エラーが発生しました';
                 portfolioError.classList.remove('d-none');
-            });
+            }
         }
 
         function showError(message) {
@@ -1048,11 +767,6 @@
         }
 
         async function getStockData() {
-            if (!isAuthenticated) {
-                alert('ログインが必要です');
-                return;
-            }
-
             const ticker = document.getElementById('ticker').value.trim();
             const period = document.getElementById('period').value;
             currentTickerForPortfolio = ticker;
@@ -1083,17 +797,13 @@
             try {
                 console.log('リクエストデータ:', {
                     ticker: ticker,
-                    period: period,
-                    headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-                    }
+                    period: period
                 });
 
                 const response = await fetch('/get_stock_list', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
                         ticker: ticker,
@@ -1153,8 +863,7 @@
                 const response = await fetch('/run_backtest', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
                         ticker: ticker,
@@ -1701,11 +1410,6 @@
 
         // 銘柄データを表示する関数を追加
         async function showStockData(ticker) {
-            if (!isAuthenticated) {
-                alert('ログインが必要です');
-                return;
-            }
-
             currentTickerForPortfolio = ticker;
             document.getElementById('ticker').value = ticker;
             showLoading(true);
@@ -1727,8 +1431,7 @@
                 const response = await fetch('/get_stock_list', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
                         ticker: ticker,
@@ -1752,55 +1455,6 @@
                 showLoading(false);
             }
         }
-
-        // パスワード変更フォームの表示/非表示
-        function showChangePasswordForm() {
-            document.getElementById('changePasswordForm').style.display = 'block';
-        }
-
-        function hideChangePasswordForm() {
-            document.getElementById('changePasswordForm').style.display = 'none';
-            document.getElementById('changePasswordFormElement').reset();
-        }
-
-        // パスワード変更処理
-        document.getElementById('changePasswordFormElement').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const currentPassword = document.getElementById('currentPassword').value;
-            const newPassword = document.getElementById('newPasswordChange').value;
-            const confirmNewPassword = document.getElementById('confirmNewPassword').value;
-
-            if (newPassword !== confirmNewPassword) {
-                alert('新しいパスワードが一致しません');
-                return;
-            }
-
-            try {
-                const response = await fetch('/change_password', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-                    },
-                    body: JSON.stringify({
-                        current_password: currentPassword,
-                        new_password: newPassword
-                    })
-                });
-
-                const data = await response.json();
-                if (data.success) {
-                    alert('パスワードが変更されました');
-                    hideChangePasswordForm();
-                } else {
-                    alert(data.message || 'パスワードの変更に失敗しました');
-                }
-            } catch (error) {
-                console.error('パスワード変更エラー:', error);
-                alert('パスワードの変更中にエラーが発生しました');
-            }
-        });
 
         // チャートの初期化処理を修正
         function initializeCharts() {
