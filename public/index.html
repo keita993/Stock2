@@ -81,23 +81,6 @@
       color: var(--muted);
     }
 
-    .status-strip {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      justify-content: flex-end;
-    }
-
-    .status-pill {
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      color: var(--muted);
-      background: var(--panel-soft);
-      font-size: 0.82rem;
-      padding: 0.35rem 0.7rem;
-      white-space: nowrap;
-    }
-
     .section-title {
       display: flex;
       align-items: center;
@@ -318,10 +301,6 @@
         height: 320px;
       }
 
-      .status-strip {
-        justify-content: flex-start;
-      }
-
       .market-score-grid,
       .score-components {
         grid-template-columns: 1fr;
@@ -335,14 +314,8 @@
       <div>
         <div class="eyebrow mb-1">Stock Expectation Lab</div>
         <h1 class="h3 mb-1">株式期待値分析ツール</h1>
-        <div class="muted">RSIとボリンジャーバンド下限乖離率で短期上昇期待値を算出</div>
       </div>
       <div class="d-flex flex-column align-items-lg-end gap-2">
-        <div class="status-strip">
-          <span class="status-pill">Yahoo Finance</span>
-          <span class="status-pill">Local Portfolio</span>
-          <span class="status-pill">Cloudflare Pages</span>
-        </div>
         <button id="themeToggle" class="btn btn-outline-secondary" type="button">ダークモード</button>
       </div>
     </header>
