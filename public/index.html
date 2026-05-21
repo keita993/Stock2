@@ -222,6 +222,33 @@
       margin-top: 0.9rem;
     }
 
+    .score-details {
+      margin-top: 0.85rem;
+    }
+
+    .score-details summary {
+      color: var(--primary);
+      cursor: pointer;
+      font-size: 0.84rem;
+      font-weight: 800;
+      list-style: none;
+      user-select: none;
+    }
+
+    .score-details summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .score-details summary::after {
+      content: "＋";
+      display: inline-block;
+      margin-left: 0.4rem;
+    }
+
+    .score-details[open] summary::after {
+      content: "−";
+    }
+
     .score-component {
       border: 1px solid var(--border);
       border-radius: 7px;
@@ -679,9 +706,12 @@
               <div class="muted mb-1">/ ${market.maxScore}</div>
             </div>
             <div class="muted small mt-1">終値 ${market.latestClose ? yen.format(market.latestClose) : "-"} / ${market.latestDate || "-"}</div>
-            <div class="score-components">
-              ${market.components.map((component) => renderScoreComponent(component)).join("")}
-            </div>
+            <details class="score-details">
+              <summary>指標を表示</summary>
+              <div class="score-components">
+                ${market.components.map((component) => renderScoreComponent(component)).join("")}
+              </div>
+            </details>
           </div>
         `;
       }).join("");
