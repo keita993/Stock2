@@ -201,6 +201,73 @@
       background: var(--primary);
     }
 
+    .market-score-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .market-score-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 1rem;
+    }
+
+    .score-number {
+      font-size: 2.25rem;
+      font-weight: 850;
+      line-height: 1;
+    }
+
+    .score-status {
+      border-radius: 999px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      display: inline-flex;
+      font-size: 0.78rem;
+      font-weight: 800;
+      padding: 0.26rem 0.58rem;
+      white-space: nowrap;
+    }
+
+    .score-components {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.5rem;
+      margin-top: 0.9rem;
+    }
+
+    .score-component {
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--panel);
+      min-height: 4.75rem;
+      padding: 0.65rem;
+    }
+
+    .score-component.pass {
+      border-color: rgba(8, 116, 67, 0.45);
+    }
+
+    .score-component.inactive {
+      opacity: 0.68;
+    }
+
+    .component-label {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 750;
+      line-height: 1.25;
+    }
+
+    .component-value {
+      font-size: 1rem;
+      font-weight: 800;
+      margin-top: 0.25rem;
+    }
+
     .positive,
     .expectation-high {
       color: var(--red);
@@ -254,6 +321,11 @@
       .status-strip {
         justify-content: flex-start;
       }
+
+      .market-score-grid,
+      .score-components {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -274,6 +346,22 @@
         <button id="themeToggle" class="btn btn-outline-secondary" type="button">ダークモード</button>
       </div>
     </header>
+
+    <section class="panel p-4 mb-3" id="marketScoreSection">
+      <div class="section-title">
+        <div>
+          <h2>市場 BUY SCORE Lite</h2>
+          <div class="muted small mt-1">信用評価損益率なし。自動取得できた指標だけで採点</div>
+        </div>
+        <button id="refreshMarketScoreBtn" class="btn btn-sm btn-outline-secondary" type="button">更新</button>
+      </div>
+      <div id="marketScoreBody" class="market-score-grid">
+        <div class="market-score-card">
+          <div class="muted">市場データを取得中...</div>
+        </div>
+      </div>
+      <div id="marketScoreMeta" class="muted small mt-3"></div>
+    </section>
 
     <section class="panel p-4 mb-3">
       <div class="section-title">
@@ -475,6 +563,7 @@
     document.getElementById("backtestBtn").addEventListener("click", runBacktest);
     document.getElementById("addPortfolioBtn").addEventListener("click", addCurrentToPortfolio);
     document.getElementById("refreshPortfolioBtn").addEventListener("click", renderPortfolio);
+    document.getElementById("refreshMarketScoreBtn").addEventListener("click", loadMarketScore);
     document.getElementById("ticker").addEventListener("keydown", (event) => {
       if (event.key === "Enter") loadStock();
     });
@@ -484,6 +573,7 @@
     document.getElementById("themeToggle").addEventListener("click", toggleTheme);
 
     initTheme();
+    loadMarketScore();
     renderPortfolio();
 
     async function loadStock(tickerOverride) {
@@ -557,6 +647,90 @@
         throw new Error(data.error || `HTTP ${response.status}`);
       }
       return data;
+    }
+
+    async function loadMarketScore() {
+      const body = document.getElementById("marketScoreBody");
+      const meta = document.getElementById("marketScoreMeta");
+      const button = document.getElementById("refreshMarketScoreBtn");
+      button.disabled = true;
+      body.innerHTML = `<div class="market-score-card"><div class="muted">市場データを取得中...</div></div>`;
+      meta.textContent = "";
+
+      try {
+        const response = await fetch("/api/market-score");
+        const data = await response.json();
+        if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
+        renderMarketScore(data);
+      } catch (error) {
+        body.innerHTML = `
+          <div class="market-score-card">
+            <div class="fw-bold">BUY SCOREを取得できませんでした</div>
+            <div class="muted small mt-2">${escapeHtml(error.message)}</div>
+          </div>
+        `;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    function renderMarketScore(data) {
+      const body = document.getElementById("marketScoreBody");
+      body.innerHTML = data.markets.map((market) => {
+        if (!market.ok) {
+          return `
+            <div class="market-score-card">
+              <div class="d-flex justify-content-between gap-2 align-items-start">
+                <div>
+                  <div class="muted small">${market.ticker || "-"}</div>
+                  <div class="h5 mb-0">${market.label}</div>
+                </div>
+                <span class="score-status">取得不可</span>
+              </div>
+              <div class="muted small mt-3">${escapeHtml(market.error || "データを取得できませんでした")}</div>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="market-score-card">
+            <div class="d-flex justify-content-between gap-2 align-items-start">
+              <div>
+                <div class="muted small">${market.ticker}</div>
+                <div class="h5 mb-0">${market.label}</div>
+              </div>
+              <span class="score-status">${market.status}</span>
+            </div>
+            <div class="d-flex align-items-end gap-2 mt-3">
+              <div class="score-number">${market.score}</div>
+              <div class="muted mb-1">/ ${market.maxScore}</div>
+            </div>
+            <div class="muted small mt-1">終値 ${market.latestClose ? yen.format(market.latestClose) : "-"} / ${market.latestDate || "-"}</div>
+            <div class="score-components">
+              ${market.components.map((component) => renderScoreComponent(component)).join("")}
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      const generatedAt = data.generatedAt ? new Date(data.generatedAt).toLocaleString("ja-JP") : "-";
+      document.getElementById("marketScoreMeta").textContent =
+        `更新: ${generatedAt} / 裁定買い残はJPX Excel解析を後続実装 / 信用評価損益率は未使用`;
+    }
+
+    function renderScoreComponent(component) {
+      const state = component.active ? (component.passed ? "pass" : "") : "inactive";
+      const badge = component.active ? (component.passed ? "+1" : "0") : "-";
+      return `
+        <div class="score-component ${state}">
+          <div class="d-flex justify-content-between gap-2">
+            <div class="component-label">${component.label}</div>
+            <div class="${component.passed ? "positive" : "muted"} fw-bold">${badge}</div>
+          </div>
+          <div class="component-value">${component.formatted}</div>
+          <div class="muted small mt-1">${component.source || "-"}</div>
+        </div>
+      `;
     }
 
     function renderStockData(rows, trades = []) {
@@ -775,6 +949,15 @@
 
     function formatOptional(value) {
       return value === null || value === undefined || Number.isNaN(value) ? "-" : pct.format(value);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
     }
 
     function showError(message) {
