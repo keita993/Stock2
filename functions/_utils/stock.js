@@ -16,7 +16,7 @@ export function normalizeTicker(ticker) {
   if (!value) {
     throw new Error("銘柄コードを入力してください");
   }
-  if (/^\d{4}$/.test(value)) {
+  if (/^\d[0-9A-Z]{3}$/.test(value)) {
     return `${value}.T`;
   }
   return value;
