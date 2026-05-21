@@ -21,6 +21,9 @@
       --red: #c83224;
       --green: #087443;
       --amber: #b54708;
+      --chart-line: #2454a6;
+      --chart-buy: #087443;
+      --chart-sell: #c83224;
       --shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
     }
 
@@ -38,6 +41,9 @@
       --red: #ff837a;
       --green: #73d1a2;
       --amber: #f7b267;
+      --chart-line: #8fb7ff;
+      --chart-buy: #f7b267;
+      --chart-sell: #ff837a;
       --shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
     }
 
@@ -459,6 +465,7 @@
   <script>
     const portfolioKey = "stockPortfolio";
     let currentStock = null;
+    let currentTrades = [];
     let stockChart = null;
 
     const yen = new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 1 });
@@ -553,6 +560,7 @@
     }
 
     function renderStockData(rows, trades = []) {
+      currentTrades = trades;
       const body = document.getElementById("stockBody");
       body.innerHTML = rows.map((row) => `
         <tr>
@@ -587,6 +595,13 @@
       const buyPoints = trades.map((trade) => ({ x: trade.buy_date, y: trade.buy_price }));
       const sellPoints = trades.map((trade) => ({ x: trade.sell_date, y: trade.sell_price }));
       const context = document.getElementById("stockChart");
+      const styles = getComputedStyle(document.documentElement);
+      const chartLine = styles.getPropertyValue("--chart-line").trim();
+      const chartBuy = styles.getPropertyValue("--chart-buy").trim();
+      const chartSell = styles.getPropertyValue("--chart-sell").trim();
+      const chartText = styles.getPropertyValue("--muted").trim();
+      const chartGrid = styles.getPropertyValue("--border").trim();
+      const chartPointBorder = styles.getPropertyValue("--panel").trim();
 
       if (stockChart) stockChart.destroy();
       stockChart = new Chart(context, {
@@ -597,28 +612,34 @@
             {
               label: "終値",
               data: sorted.map((row) => row.close),
-              borderColor: "#1570d8",
-              backgroundColor: "rgba(21, 112, 216, 0.08)",
+              borderColor: chartLine,
+              backgroundColor: "rgba(36, 84, 166, 0.08)",
               pointRadius: 0,
               tension: 0.18,
             },
             {
               label: "買い",
               data: buyPoints,
-              borderColor: "#1570d8",
-              backgroundColor: "#1570d8",
+              borderColor: chartBuy,
+              backgroundColor: chartBuy,
               pointStyle: "triangle",
-              pointRadius: 6,
+              pointRadius: 8,
+              pointHoverRadius: 11,
+              pointBorderWidth: 1.5,
+              pointBorderColor: chartPointBorder,
               showLine: false,
             },
             {
               label: "売り",
               data: sellPoints,
-              borderColor: "#d92d20",
-              backgroundColor: "#d92d20",
+              borderColor: chartSell,
+              backgroundColor: chartSell,
               pointStyle: "triangle",
               rotation: 180,
-              pointRadius: 6,
+              pointRadius: 8,
+              pointHoverRadius: 11,
+              pointBorderWidth: 1.5,
+              pointBorderColor: chartPointBorder,
               showLine: false,
             },
           ],
@@ -627,8 +648,20 @@
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            x: { ticks: { maxTicksLimit: 8 } },
-            y: { beginAtZero: false },
+            x: {
+              ticks: { color: chartText, maxTicksLimit: 8 },
+              grid: { color: chartGrid },
+            },
+            y: {
+              beginAtZero: false,
+              ticks: { color: chartText },
+              grid: { color: chartGrid },
+            },
+          },
+          plugins: {
+            legend: {
+              labels: { color: chartText },
+            },
           },
         },
       });
@@ -767,6 +800,9 @@
       const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
       localStorage.setItem("theme", next);
       initTheme();
+      if (currentStock?.stock_data) {
+        renderChart(currentStock.stock_data, currentTrades);
+      }
     }
   </script>
 </body>
