@@ -8,50 +8,191 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
   <style>
     :root {
-      --bg: #f7f8fa;
+      --bg: #eef2f6;
       --panel: #ffffff;
-      --text: #1f2937;
+      --panel-soft: #f8fafc;
+      --text: #182230;
       --muted: #667085;
-      --border: #d9dee7;
+      --border: #d6dce5;
+      --border-strong: #b8c2d0;
+      --primary: #2454a6;
+      --primary-strong: #163d7a;
       --blue: #1264d8;
-      --red: #d92d20;
+      --red: #c83224;
+      --green: #087443;
+      --amber: #b54708;
+      --shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
     }
 
     [data-theme="dark"] {
-      --bg: #121417;
-      --panel: #1d2127;
+      --bg: #101418;
+      --panel: #1a2028;
+      --panel-soft: #202834;
       --text: #edf1f7;
       --muted: #aab4c3;
-      --border: #343b46;
+      --border: #303946;
+      --border-strong: #465366;
+      --primary: #7aa7ff;
+      --primary-strong: #a9c5ff;
       --blue: #6aa8ff;
       --red: #ff837a;
+      --green: #73d1a2;
+      --amber: #f7b267;
+      --shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
     }
 
     body {
       background: var(--bg);
       color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      letter-spacing: 0;
+    }
+
+    .app-shell {
+      max-width: 1440px;
     }
 
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .app-header {
+      border-top: 4px solid var(--primary);
+    }
+
+    .eyebrow {
+      color: var(--primary);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
     }
 
     .muted {
       color: var(--muted);
     }
 
+    .status-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
+
+    .status-pill {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      background: var(--panel-soft);
+      font-size: 0.82rem;
+      padding: 0.35rem 0.7rem;
+      white-space: nowrap;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .section-title h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin: 0;
+    }
+
+    .form-label {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+    }
+
+    .form-control,
+    .input-group-text {
+      background-color: var(--panel-soft);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .form-control:focus {
+      background-color: var(--panel);
+      border-color: var(--primary);
+      box-shadow: 0 0 0 0.2rem rgba(36, 84, 166, 0.14);
+      color: var(--text);
+    }
+
+    .btn {
+      border-radius: 7px;
+      font-weight: 700;
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .btn-primary:hover,
+    .btn-primary:focus {
+      background-color: var(--primary-strong);
+      border-color: var(--primary-strong);
+    }
+
+    .btn-outline-secondary,
+    .btn-outline-success,
+    .btn-outline-primary,
+    .btn-outline-danger {
+      background: var(--panel);
+    }
+
     .table {
       --bs-table-bg: var(--panel);
       --bs-table-color: var(--text);
       --bs-table-border-color: var(--border);
+      font-size: 0.88rem;
+    }
+
+    .table thead th {
+      background: var(--panel-soft);
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      vertical-align: middle;
+    }
+
+    .table tbody tr:hover {
+      background: var(--panel-soft);
+    }
+
+    .table td,
+    .table th {
+      padding: 0.62rem 0.75rem;
     }
 
     .value {
-      font-size: 1.35rem;
-      font-weight: 700;
+      font-size: 1.55rem;
+      font-weight: 800;
       line-height: 1.1;
+      margin-top: 0.25rem;
+    }
+
+    .metric-card {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .metric-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 4px;
+      background: var(--primary);
     }
 
     .positive,
@@ -67,7 +208,7 @@
     }
 
     .chart-wrap {
-      height: 380px;
+      height: 430px;
     }
 
     .table-wrap {
@@ -75,24 +216,64 @@
       overflow: auto;
     }
 
+    .stock-name {
+      background: var(--panel-soft);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      min-height: 2.55rem;
+      padding: 0.55rem 0.75rem;
+    }
+
+    .empty-row {
+      color: var(--muted);
+      height: 3.5rem;
+    }
+
     th {
       position: sticky;
       top: 0;
       z-index: 1;
     }
+
+    @media (max-width: 768px) {
+      .app-shell {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+      }
+
+      .chart-wrap {
+        height: 320px;
+      }
+
+      .status-strip {
+        justify-content: flex-start;
+      }
+    }
   </style>
 </head>
 <body>
-  <main class="container py-4">
-    <header class="panel p-3 mb-3 d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
+  <main class="container app-shell py-4">
+    <header class="panel app-header p-4 mb-3 d-flex flex-column flex-lg-row gap-3 justify-content-between align-items-lg-center">
       <div>
+        <div class="eyebrow mb-1">Stock Expectation Lab</div>
         <h1 class="h3 mb-1">株式期待値分析ツール</h1>
         <div class="muted">RSIとボリンジャーバンド下限乖離率で短期上昇期待値を算出</div>
       </div>
-      <button id="themeToggle" class="btn btn-outline-secondary" type="button">ダークモード</button>
+      <div class="d-flex flex-column align-items-lg-end gap-2">
+        <div class="status-strip">
+          <span class="status-pill">Yahoo Finance</span>
+          <span class="status-pill">Local Portfolio</span>
+          <span class="status-pill">Cloudflare Pages</span>
+        </div>
+        <button id="themeToggle" class="btn btn-outline-secondary" type="button">ダークモード</button>
+      </div>
     </header>
 
-    <section class="panel p-3 mb-3">
+    <section class="panel p-4 mb-3">
+      <div class="section-title">
+        <h2>分析条件</h2>
+        <span class="muted small">4桁の日本株コードは自動で .T に変換</span>
+      </div>
       <div class="row g-3 align-items-end">
         <div class="col-12 col-lg-5">
           <label for="ticker" class="form-label">銘柄コード</label>
@@ -116,13 +297,13 @@
           <button id="addPortfolioBtn" class="btn btn-outline-success w-100" type="button" disabled>ポートフォリオに追加</button>
         </div>
       </div>
-      <div id="stockName" class="mt-3 fw-semibold"></div>
+      <div id="stockName" class="stock-name mt-3 fw-semibold"></div>
       <div id="error" class="alert alert-danger mt-3 d-none"></div>
     </section>
 
-    <section id="portfolioSection" class="panel p-3 mb-3">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h2 class="h5 mb-0">ポートフォリオ</h2>
+    <section id="portfolioSection" class="panel p-4 mb-3">
+      <div class="section-title">
+        <h2>ポートフォリオ</h2>
         <button id="refreshPortfolioBtn" class="btn btn-sm btn-outline-secondary" type="button">更新</button>
       </div>
       <div class="table-responsive">
@@ -143,37 +324,45 @@
 
     <section id="stats" class="row g-3 mb-3 d-none">
       <div class="col-6 col-lg-3">
-        <div class="panel p-3 h-100">
+        <div class="panel metric-card p-3 h-100">
           <div class="muted">期待値 平均</div>
           <div id="avgExpectation" class="value">-</div>
         </div>
       </div>
       <div class="col-6 col-lg-3">
-        <div class="panel p-3 h-100">
+        <div class="panel metric-card p-3 h-100">
           <div class="muted">期待値 Max</div>
           <div id="maxExpectation" class="value">-</div>
         </div>
       </div>
       <div class="col-6 col-lg-3">
-        <div class="panel p-3 h-100">
+        <div class="panel metric-card p-3 h-100">
           <div class="muted">期待値 Min</div>
           <div id="minExpectation" class="value">-</div>
         </div>
       </div>
       <div class="col-6 col-lg-3">
-        <div class="panel p-3 h-100">
+        <div class="panel metric-card p-3 h-100">
           <div class="muted">期間収益率</div>
           <div id="periodReturn" class="value">-</div>
         </div>
       </div>
     </section>
 
-    <section class="panel p-3 mb-3 chart-wrap">
-      <canvas id="stockChart"></canvas>
+    <section class="panel p-4 mb-3">
+      <div class="section-title">
+        <h2>価格チャート</h2>
+        <span class="muted small">買い・売りポイントはバックテスト実行後に表示</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="stockChart"></canvas>
+      </div>
     </section>
 
-    <section class="panel p-3 mb-3">
-      <h2 class="h5 mb-3">バックテスト設定</h2>
+    <section class="panel p-4 mb-3">
+      <div class="section-title">
+        <h2>バックテスト設定</h2>
+      </div>
       <div class="row g-3 align-items-end">
         <div class="col-6 col-lg-3">
           <label for="buyThreshold" class="form-label">買い閾値</label>
@@ -198,31 +387,34 @@
     <section id="backtestResults" class="d-none">
       <div class="row g-3 mb-3">
         <div class="col-6 col-lg-3">
-          <div class="panel p-3 h-100">
+          <div class="panel metric-card p-3 h-100">
             <div class="muted">総取引回数</div>
             <div id="totalTrades" class="value">-</div>
           </div>
         </div>
         <div class="col-6 col-lg-3">
-          <div class="panel p-3 h-100">
+          <div class="panel metric-card p-3 h-100">
             <div class="muted">勝率</div>
             <div id="winRate" class="value">-</div>
           </div>
         </div>
         <div class="col-6 col-lg-3">
-          <div class="panel p-3 h-100">
+          <div class="panel metric-card p-3 h-100">
             <div class="muted">総利益率</div>
             <div id="totalProfitRate" class="value">-</div>
           </div>
         </div>
         <div class="col-6 col-lg-3">
-          <div class="panel p-3 h-100">
+          <div class="panel metric-card p-3 h-100">
             <div class="muted">総利益金額</div>
             <div id="totalProfitAmount" class="value">-</div>
           </div>
         </div>
       </div>
-      <div class="panel p-3 mb-3 table-wrap">
+      <div class="panel p-4 mb-3 table-wrap">
+        <div class="section-title">
+          <h2>取引履歴</h2>
+        </div>
         <table class="table table-sm align-middle mb-0">
           <thead>
             <tr>
@@ -241,7 +433,10 @@
       </div>
     </section>
 
-    <section class="panel p-3 table-wrap">
+    <section class="panel p-4 table-wrap">
+      <div class="section-title">
+        <h2>株価データ</h2>
+      </div>
       <table class="table table-sm align-middle mb-0">
         <thead>
           <tr>
@@ -492,7 +687,7 @@
       const body = document.getElementById("portfolioBody");
       const portfolio = getPortfolio();
       if (portfolio.length === 0) {
-        body.innerHTML = `<tr><td colspan="5" class="text-center muted">ポートフォリオが空です</td></tr>`;
+        body.innerHTML = `<tr class="empty-row"><td colspan="5" class="text-center">ポートフォリオが空です</td></tr>`;
         return;
       }
 
